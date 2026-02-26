@@ -28,6 +28,12 @@ var (
 	ErrInvalidMessage   error = errors.New("cdp: invalid message format")
 )
 
+// NodeID represents a DOM node identifier in CDP.
+type NodeID int64
+
+// SessionID represents a CDP session identifier.
+type SessionID string
+
 // Client represents a CDP WebSocket client connection.
 type Client struct {
 	wsURL      string

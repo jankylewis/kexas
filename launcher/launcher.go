@@ -154,6 +154,9 @@ func (b *Browser) Close() error {
 
 	b.cmd.Wait()
 
+	// Brief pause to ensure the port is fully released before next launch
+	time.Sleep(2 * time.Second)
+
 	// Clean up temporary profile directory
 	if b.userDataDir != "" {
 		b.log.Debug("cleaning up temp profile", "path", b.userDataDir)
@@ -261,8 +264,8 @@ func buildArgs(opts *Options) ([]string, string) {
 		"--no-service-autorun",
 		"--password-store=basic",
 		"--use-mock-keychain",
-		"--enable-automation",
 		"--disable-blink-features=AutomationControlled",
+		"--window-size=1920,1080",
 	}
 
 	if opts.Headless {

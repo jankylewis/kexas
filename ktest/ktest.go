@@ -92,7 +92,7 @@ type Config struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Headless:         true,
-		Timeout:          30 * time.Second,
+		Timeout:          20 * time.Second, // Changed from 30s to 20s
 		Retries:          0,
 		Parallel:         false,
 		ScreenshotOnFail: true,

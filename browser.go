@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/kexas-project/kexas/internal/agent"
 	"github.com/kexas-project/kexas/internal/cdp"
 	"github.com/kexas-project/kexas/internal/logger"
 	"github.com/kexas-project/kexas/launcher"
@@ -162,12 +163,35 @@ func (b *Browser) attachToPage(targetID string) (*Page, error) {
 
 	b.log.Info("attached to page", "sessionId", sessionID, "targetId", targetID)
 
+	// Stealth: enable required domains first
+	_, _ = b.client.SendToSession(b.ctx, sessionID, "Network.enable", nil)
+	_, _ = b.client.SendToSession(b.ctx, sessionID, "Page.enable", nil)
+
+	// Stealth: override user-agent to remove "HeadlessChrome" (go-rod pattern)
+	var userAgent string = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
+	_, _ = b.client.SendToSession(b.ctx, sessionID, "Network.setUserAgentOverride", map[string]interface{}{
+		"userAgent":      userAgent,
+		"acceptLanguage": "en-US,en;q=0.9",
+		"platform":       "macOS",
+	})
+
+	// Stealth: patch navigator.webdriver before any page scripts run
+	_, _ = b.client.SendToSession(b.ctx, sessionID, "Page.addScriptToEvaluateOnNewDocument", map[string]interface{}{
+		"source": `
+			Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+			Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+			Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+			window.chrome = {runtime: {}};
+		`,
+	})
+
 	var page *Page = &Page{
-		browser:   b,
-		targetID:  targetID,
-		sessionID: sessionID,
-		log:       logger.New("page"),
-		ctx:       b.ctx,
+		browser:      b,
+		targetID:     targetID,
+		sessionID:    sessionID,
+		log:          logger.New("page"),
+		ctx:          b.ctx,
+		agentManager: agent.NewAgentManager(b.client, sessionID),
 	}
 
 	return page, nil
