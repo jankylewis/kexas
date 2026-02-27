@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,6 +27,18 @@ var (
 	ErrLaunchFailed     error = errors.New("launcher: failed to launch browser")
 	ErrNoDebuggerURL    error = errors.New("launcher: could not find debugger URL")
 )
+
+// isPortAvailable checks if a port is available for binding
+func isPortAvailable(port int) bool {
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		// Port is in use
+		return false
+	}
+	listener.Close()
+	return true
+}
 
 // Options configures browser launch behavior.
 type Options struct {
@@ -51,6 +64,7 @@ type Browser struct {
 	log         *logger.Logger
 	cancelFunc  context.CancelFunc
 	userDataDir string // Temporary profile directory to clean up
+	port        int    // Debugging port number
 }
 
 // Launch starts a Chromium browser with the given options.
@@ -130,6 +144,7 @@ func Launch(ctx context.Context, opts *Options) (*Browser, error) {
 		log:         log,
 		cancelFunc:  cancel,
 		userDataDir: userDataDir,
+		port:        opts.Port,
 	}
 
 	return browser, nil
@@ -154,8 +169,25 @@ func (b *Browser) Close() error {
 
 	b.cmd.Wait()
 
-	// Brief pause to ensure the port is fully released before next launch
-	time.Sleep(2 * time.Second)
+	// Poll for port release with 3s timeout and 150ms intervals
+	var portTimeout time.Duration = 3 * time.Second
+	var pollInterval time.Duration = 150 * time.Millisecond
+	var start time.Time = time.Now()
+
+	b.log.Debug("waiting for port to be released", "port", b.port)
+
+	for time.Since(start) < portTimeout {
+		if isPortAvailable(b.port) {
+			b.log.Debug("port released successfully", "port", b.port, "elapsed", time.Since(start))
+			break
+		}
+		time.Sleep(pollInterval)
+	}
+
+	// If port is still in use after timeout, log a warning but continue
+	if !isPortAvailable(b.port) {
+		b.log.Warn("port still in use after timeout", "port", b.port, "timeout", portTimeout)
+	}
 
 	// Clean up temporary profile directory
 	if b.userDataDir != "" {

@@ -47,8 +47,9 @@ func AlphaInit(components ...interface{}) interface{} {
 // registerComponent processes a single component and registers it
 // with the appropriate ktest system
 func registerComponent(component interface{}) error {
+	// Skip nil components (hooks return nil after registration)
 	if component == nil {
-		return fmt.Errorf("component cannot be nil")
+		return nil
 	}
 
 	// Use reflection to determine component type

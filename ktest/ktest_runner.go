@@ -38,6 +38,13 @@ func runRegisteredTests(tests []NamedTest) {
 	var testFilter string = os.Getenv("KEXAS_TEST_RUN")
 	var filteredTests []NamedTest = tests
 
+	// Track test results for detailed summary
+	type testResult struct {
+		name   string
+		passed bool
+	}
+	var testResults []testResult
+
 	if testFilter != "" {
 		fmt.Printf("🔍 KEXAS_TEST_RUN filter: %s\n", testFilter)
 		filteredTests = []NamedTest{}
@@ -76,6 +83,8 @@ func runRegisteredTests(tests []NamedTest) {
 	// Run each test with its own browser (sequential execution)
 	for _, test := range filteredTests {
 		var testName string = test.Name
+		var testPassed bool = true
+
 		t.Run(testName, func(t KTestT) {
 			t.Logf("🧪 ktest: running %s", testName)
 
@@ -92,6 +101,7 @@ func runRegisteredTests(tests []NamedTest) {
 			browser, err = kexas.Launch(opts)
 			if err != nil {
 				t.Errorf("❌ ktest: failed to launch browser: %v", err)
+				testPassed = false
 				return
 			}
 			defer browser.Close() // Guaranteed cleanup after each test
@@ -101,6 +111,7 @@ func runRegisteredTests(tests []NamedTest) {
 			page, err = browser.FirstPage()
 			if err != nil {
 				t.Errorf("❌ ktest: failed to get first page: %v", err)
+				testPassed = false
 				return
 			}
 			defer page.Close()
@@ -112,6 +123,7 @@ func runRegisteredTests(tests []NamedTest) {
 			defer func() {
 				if r := recover(); r != nil {
 					t.Errorf("❌ ktest: test %s panicked: %v", testName, r)
+					testPassed = false
 
 					// Take screenshot on failure if enabled
 					if config.ScreenshotOnFail {
@@ -127,22 +139,47 @@ func runRegisteredTests(tests []NamedTest) {
 			test.Func(page, t)
 
 			// Check if test failed and take screenshot
-			if t.Failed() && config.ScreenshotOnFail {
-				takeScreenshot(t, page, testName, config.ScreenshotDir)
+			if t.Failed() {
+				testPassed = false
+				if config.ScreenshotOnFail {
+					takeScreenshot(t, page, testName, config.ScreenshotDir)
+				}
 			}
 
 			t.Logf("✅ ktest: %s completed", testName)
 		})
+
+		// Store test result
+		testResults = append(testResults, testResult{name: testName, passed: testPassed})
 	}
 
 	// Execute global AfterAll hook
 	ExecuteGlobalAfterAll()
 
-	// Print summary
-	if t.Failed() {
-		fmt.Println("\n❌ Some tests failed")
-		os.Exit(1)
+	// Print detailed summary
+	if len(filteredTests) == 1 {
+		fmt.Printf("\nTest finished:\n")
 	} else {
-		fmt.Printf("\n✅ All %d tests passed!\n", len(tests))
+		fmt.Printf("\nAll %d tests finished:\n", len(filteredTests))
+	}
+	for _, result := range testResults {
+		if result.passed {
+			fmt.Printf("%s passed\n", result.name)
+		} else {
+			fmt.Printf("%s failed\n", result.name)
+		}
+	}
+
+	// Exit with error code if any tests failed
+	var hasFailures bool = false
+	for _, result := range testResults {
+		if !result.passed {
+			hasFailures = true
+			break
+		}
+	}
+
+	if hasFailures {
+		os.Exit(1)
 	}
 }

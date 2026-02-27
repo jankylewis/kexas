@@ -575,19 +575,34 @@ failed to extract debugger URL: ...
 The previous test's `Browser.Close()` → `Launcher.Close()` kills the Chromium process, but the OS may hold the port in `TIME_WAIT` state for several hundred milliseconds.
 
 ### Fix
-`launcher.Close()` includes a `time.Sleep(2 * time.Second)` after killing the process to ensure the port is fully released:
+`launcher.Close()` uses an adaptive polling mechanism to wait for the port to be released:
 
 ```go
-func (l *Launcher) Close() error {
+func (b *Browser) Close() error {
     // Kill browser process
-    l.cmd.Process.Kill()
-    l.cmd.Wait()
-    // Wait for port release
-    time.Sleep(2 * time.Second)
+    b.cmd.Process.Kill()
+    b.cmd.Wait()
+    
+    // Poll for port release with 3s timeout and 150ms intervals
+    var portTimeout time.Duration = 3 * time.Second
+    var pollInterval time.Duration = 150 * time.Millisecond
+    
+    for time.Since(start) < portTimeout {
+        if isPortAvailable(b.port) {
+            break // Port released, continue immediately
+        }
+        time.Sleep(pollInterval)
+    }
+    
     // Clean up temp profile
-    os.RemoveAll(l.tempDir)
+    os.RemoveAll(b.userDataDir)
 }
 ```
+
+**Benefits**:
+- **Faster cleanup**: If the port releases quickly (e.g., 300ms), the test continues immediately instead of waiting the full 2 seconds
+- **Adaptive timeout**: Waits up to 3 seconds if needed, but typically much less
+- **Better reliability**: Actively checks port availability instead of guessing
 
 ### Test Selector Best Practices
 
@@ -650,7 +665,7 @@ Testing strategy:
 - **Framework**: Standard `testing` for units, `ktest` for integration
 - **Assertions**: Use `kassert` for clear, fluent assertions
 - **Early bailout**: Use `t.Errorf()` + `return`, never `t.Fatal()` (preserves defer cleanup)
-- **Port conflicts**: 2s sleep in `Launcher.Close()` between sequential tests
+- **Port conflicts**: Adaptive port polling (3s timeout, 150ms intervals) in `Browser.Close()` between sequential tests
 - **Test filtering**: Use `KEXAS_TEST_RUN` environment variable to run specific tests
 - **Coverage**: Critical paths first, then errors, then edge cases
 
