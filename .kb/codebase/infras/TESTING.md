@@ -598,6 +598,49 @@ When writing selectors for real-world sites:
 
 ---
 
+## Test Filtering with KEXAS_TEST_RUN (Updated February 27, 2026)
+
+For AlphaInit/Group registered tests, you can filter which tests to run using the `KEXAS_TEST_RUN` environment variable.
+
+### Usage
+
+```bash
+# Run a specific test by exact name
+KEXAS_TEST_RUN=TestAmazonSignInComplete go run signin_tests.go
+
+# Run tests matching a partial string (contains)
+KEXAS_TEST_RUN=SignInComplete go run signin_tests.go
+KEXAS_TEST_RUN=LoginOnly go run signin_tests.go
+
+# Run all tests (no filter)
+go run signin_tests.go
+```
+
+### Behavior
+
+- **Exact match**: If the filter exactly matches a test name, only that test runs
+- **Partial match**: If the filter is contained within a test name, that test runs
+- **No matches**: If no tests match, the framework lists available tests and exits
+- **No filter**: If `KEXAS_TEST_RUN` is not set, all registered tests run
+
+### Example Output
+
+```bash
+$ KEXAS_TEST_RUN=TestAmazonSignInComplete go run signin_tests.go
+🔍 KEXAS_TEST_RUN filter: TestAmazonSignInComplete
+📋 Running 1 filtered test(s):
+  - Amazon Sign-In Flow.TestAmazonSignInComplete
+```
+
+### Supported Test Types
+
+This filtering works for:
+- AlphaInit registered tests (`ktest.Test("name", ...)`)
+- Group-based tests (`ktest.Group(...)` with nested tests)
+- Both root-level and grouped tests
+
+---
+
 ## Summary
 
 Testing strategy:
@@ -608,5 +651,6 @@ Testing strategy:
 - **Assertions**: Use `kassert` for clear, fluent assertions
 - **Early bailout**: Use `t.Errorf()` + `return`, never `t.Fatal()` (preserves defer cleanup)
 - **Port conflicts**: 2s sleep in `Launcher.Close()` between sequential tests
+- **Test filtering**: Use `KEXAS_TEST_RUN` environment variable to run specific tests
 - **Coverage**: Critical paths first, then errors, then edge cases
 

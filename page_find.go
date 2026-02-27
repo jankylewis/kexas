@@ -24,7 +24,7 @@ func (p *Page) Find(selector string) (*Element, error) {
 
 	p.log.Debug("finding element", "selector", selector)
 
-	var timeout time.Duration = 10 * time.Second
+	var timeout time.Duration = 7 * time.Second
 	var pollInterval time.Duration = 200 * time.Millisecond
 	var start time.Time = time.Now()
 	var lastErr error

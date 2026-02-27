@@ -3,6 +3,7 @@ package ktest
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/kexas-project/kexas"
 	"github.com/kexas-project/kexas/launcher"
@@ -33,6 +34,33 @@ func runRegisteredTests(tests []NamedTest) {
 	// Create test runner
 	var t KTestT = newKTestT()
 
+	// Check for test filter environment variable
+	var testFilter string = os.Getenv("KEXAS_TEST_RUN")
+	var filteredTests []NamedTest = tests
+
+	if testFilter != "" {
+		fmt.Printf("🔍 KEXAS_TEST_RUN filter: %s\n", testFilter)
+		filteredTests = []NamedTest{}
+		for _, test := range tests {
+			// Support both exact match and partial match (contains)
+			if test.Name == testFilter || strings.Contains(test.Name, testFilter) {
+				filteredTests = append(filteredTests, test)
+			}
+		}
+		if len(filteredTests) == 0 {
+			fmt.Printf("❌ No tests found matching filter: %s\n", testFilter)
+			fmt.Printf("Available tests:\n")
+			for _, test := range tests {
+				fmt.Printf("  - %s\n", test.Name)
+			}
+			return
+		}
+		fmt.Printf("📋 Running %d filtered test(s):\n", len(filteredTests))
+		for _, test := range filteredTests {
+			fmt.Printf("  - %s\n", test.Name)
+		}
+	}
+
 	// Load configuration and apply it
 	var config *Config = loadConfig()
 
@@ -46,7 +74,7 @@ func runRegisteredTests(tests []NamedTest) {
 	ExecuteGlobalBeforeAll()
 
 	// Run each test with its own browser (sequential execution)
-	for _, test := range tests {
+	for _, test := range filteredTests {
 		var testName string = test.Name
 		t.Run(testName, func(t KTestT) {
 			t.Logf("🧪 ktest: running %s", testName)
