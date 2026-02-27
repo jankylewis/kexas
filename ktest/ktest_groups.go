@@ -46,19 +46,23 @@ func registerNamedTest(name string, testFunc func(*kexas.Page, KTestT)) {
 	testMutex.Lock()
 	defer testMutex.Unlock()
 
-	// Get filename from caller
-	var filename string
-	for depth := 2; depth <= 5; depth++ {
-		var _, file, _, _ = runtime.Caller(depth)
-		if file != "" && !strings.Contains(file, "ktest") && !strings.Contains(file, "kexas") {
-			filename = file
+	// Get filename from caller stack
+	var callerFilename string
+	for depth := 0; depth <= 10; depth++ {
+		var _, file, _, ok = runtime.Caller(depth)
+		if !ok {
+			break
+		}
+		// Look for user's test file (not ktest/kexas internal files)
+		if file != "" && !strings.Contains(file, "/ktest/") && !strings.Contains(file, "/kexas/") {
+			callerFilename = file
 			break
 		}
 	}
 
 	var baseFilename string = "test"
-	if filename != "" {
-		baseFilename = filepath.Base(filename)
+	if callerFilename != "" {
+		baseFilename = filepath.Base(callerFilename)
 		baseFilename = strings.TrimSuffix(baseFilename, filepath.Ext(baseFilename))
 	}
 
@@ -213,19 +217,23 @@ func RegisterTestWithGroup(name string, testFunc func(*kexas.Page, KTestT)) {
 		fullName = name
 	}
 
-	// Get filename from caller
-	var filename string
-	for depth := 2; depth <= 5; depth++ {
-		var _, file, _, _ = runtime.Caller(depth)
-		if file != "" && !strings.Contains(file, "ktest") && !strings.Contains(file, "kexas") {
-			filename = file
+	// Get filename from caller stack
+	var callerFilename string
+	for depth := 0; depth <= 10; depth++ {
+		var _, file, _, ok = runtime.Caller(depth)
+		if !ok {
+			break
+		}
+		// Look for user's test file (not ktest/kexas internal files)
+		if file != "" && !strings.Contains(file, "/ktest/") && !strings.Contains(file, "/kexas/") {
+			callerFilename = file
 			break
 		}
 	}
 
 	var baseFilename string = "test"
-	if filename != "" {
-		baseFilename = filepath.Base(filename)
+	if callerFilename != "" {
+		baseFilename = filepath.Base(callerFilename)
 		baseFilename = strings.TrimSuffix(baseFilename, filepath.Ext(baseFilename))
 	}
 

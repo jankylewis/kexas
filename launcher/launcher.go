@@ -114,6 +114,14 @@ func Launch(ctx context.Context, opts *Options) (*Browser, error) {
 
 	log.Info("launching chromium", "headless", opts.Headless, "port", opts.Port)
 
+	// Check if port is available before attempting to launch
+	if !isPortAvailable(opts.Port) {
+		cancel()
+		stdout.Close()
+		log.Error("port already in use", "port", opts.Port)
+		return nil, fmt.Errorf("launcher: port %d is already in use - kill existing Chrome processes or wait for port release", opts.Port)
+	}
+
 	// Start the browser process
 	err = cmd.Start()
 	if err != nil {

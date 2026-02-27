@@ -168,7 +168,12 @@ func runRegisteredTests(tests []NamedTest) {
 		fmt.Printf("\nAll %d tests finished:\n", len(filteredTests))
 	}
 	for _, result := range testResults {
-		var displayName string = fmt.Sprintf("%s.%s", result.filename, result.name)
+		// Extract just the test method name (last segment after dot)
+		var shortName string = result.name
+		if idx := strings.LastIndex(result.name, "."); idx >= 0 {
+			shortName = result.name[idx+1:]
+		}
+		var displayName string = fmt.Sprintf("<%s.%s>", result.filename, shortName)
 		if result.passed {
 			fmt.Printf("%s passed\n", displayName)
 		} else {
