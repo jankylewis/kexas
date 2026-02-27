@@ -245,27 +245,37 @@ func (e *Element) Type(text string) error {
 		return fmt.Errorf("failed to focus element: %w", err)
 	}
 
-	// Type each character using CDP Input.dispatchKeyEvent (like go-rod/Playwright)
+	// Type each character using CDP Input.dispatchKeyEvent (Playwright pattern)
+	// Playwright dispatches 3 events per character: keyDown → char → keyUp
+	// keyDown/keyUp carry "key" only; "char" carries "text" to insert the character.
+	// If keyDown includes "text", Chrome inserts the char twice (once on keyDown, once on char).
 	for _, ch := range text {
 		var charStr string = string(ch)
 
-		// keyDown
+		// keyDown (no "text" — only identifies which key was pressed)
 		_, err = e.page.sendCommand("Input.dispatchKeyEvent", map[string]interface{}{
-			"type":           "keyDown",
-			"text":           charStr,
-			"unmodifiedText": charStr,
-			"key":            charStr,
+			"type": "keyDown",
+			"key":  charStr,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to dispatch keyDown: %w", err)
 		}
 
-		// keyUp
+		// char (carries "text" — this is what actually inserts the character)
 		_, err = e.page.sendCommand("Input.dispatchKeyEvent", map[string]interface{}{
-			"type":           "keyUp",
+			"type":           "char",
 			"text":           charStr,
 			"unmodifiedText": charStr,
 			"key":            charStr,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to dispatch char: %w", err)
+		}
+
+		// keyUp (no "text" — only signals key release)
+		_, err = e.page.sendCommand("Input.dispatchKeyEvent", map[string]interface{}{
+			"type": "keyUp",
+			"key":  charStr,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to dispatch keyUp: %w", err)
@@ -299,52 +309,13 @@ func (e *Element) WaitAndType(text string) error {
 		return errors.ErrTextEmpty
 	}
 
-	// Use CDP to wait for element to be visible using default timeout
 	var _, err error
 	_, err = e.page.WaitForElementVisible(e.selector, e.timeout)
 	if err != nil {
 		return fmt.Errorf("element not visible: %w", err)
 	}
 
-	// Resolve nodeId to objectId
-	var objectID string
-	objectID, err = e.resolveObjectID()
-	if err != nil {
-		return fmt.Errorf("failed to resolve element: %w", err)
-	}
-
-	// Use CDP Runtime.callFunctionOn to focus and type into the element
-	var typeFunction string = `
-		function(text) {
-			this.focus();
-			this.value = '';
-			this.value = text;
-			return true;
-		}
-	`
-
-	var params map[string]interface{} = map[string]interface{}{
-		"functionDeclaration": typeFunction,
-		"objectId":            objectID,
-		"arguments":           []interface{}{map[string]interface{}{"value": text}},
-		"returnByValue":       true,
-	}
-
-	var result map[string]interface{}
-	result, err = e.page.sendCommand(cdp.CmdRuntimeCallFunctionOn, params)
-	if err != nil {
-		return fmt.Errorf("failed to type into element: %w", err)
-	}
-
-	// Check if the typing was successful
-	var success bool
-	var ok bool
-	success, ok = result["result"].(map[string]interface{})["value"].(bool)
-	if !ok || !success {
-		return errors.ErrTypeOperationFailed
-	}
-
-	return nil
+	return e.Type(text)
 }
 
 // WaitAndTypeFor performs typing into the element after waiting for it to be visible with a custom timeout.
@@ -355,7 +326,6 @@ func (e *Element) WaitAndType(text string) error {
 // This method works with input elements, textarea elements, and other
 // content-editable elements. It clears any existing content before typing.
 func (e *Element) WaitAndTypeFor(text string, timeout time.Duration) error {
-	// Validate timeout
 	if timeout < 1*time.Second {
 		return errors.TimeoutInvalidFormat(timeout)
 	}
@@ -372,253 +342,15 @@ func (e *Element) WaitAndTypeFor(text string, timeout time.Duration) error {
 		return errors.ErrElementInvalidNodeID
 	}
 
-	// Wait for element to be visible using custom timeout
+	if text == "" {
+		return errors.ErrTextEmpty
+	}
+
 	var _, err error
 	_, err = e.page.WaitForElementVisible(e.selector, timeout)
 	if err != nil {
 		return fmt.Errorf("element not visible within %v: %w", timeout, err)
 	}
 
-	// Resolve nodeId to objectId
-	var objectID string
-	objectID, err = e.resolveObjectID()
-	if err != nil {
-		return fmt.Errorf("failed to resolve element: %w", err)
-	}
-
-	// Use CDP Runtime.callFunctionOn to focus and type into the element
-	var typeFunction string = `
-		function(text) {
-			this.focus();
-			this.value = '';
-			this.value = text;
-			this.dispatchEvent(new Event('input', { bubbles: true }));
-			this.dispatchEvent(new Event('change', { bubbles: true }));
-			return true;
-		}
-	`
-
-	var params map[string]interface{} = map[string]interface{}{
-		"functionDeclaration": typeFunction,
-		"objectId":            objectID,
-		"arguments":           []interface{}{map[string]interface{}{"value": text}},
-		"returnByValue":       true,
-	}
-
-	var result map[string]interface{}
-	result, err = e.page.sendCommand(cdp.CmdRuntimeCallFunctionOn, params)
-	if err != nil {
-		return fmt.Errorf("failed to type into element: %w", err)
-	}
-
-	// Check if the typing was successful
-	var success bool
-	var ok bool
-	success, ok = result["result"].(map[string]interface{})["value"].(bool)
-	if !ok || !success {
-		return errors.ErrTypeOperationFailed
-	}
-
-	return nil
-}
-
-// Hover performs an immediate mouse hover over the element without waiting.
-//
-// This method hovers over the element directly without checking if it's visible.
-// Use this when you're certain the element is ready or want maximum speed.
-// For most cases, use WaitAndHover() instead.
-func (e *Element) Hover() error {
-	if e == nil {
-		return errors.ErrElementNil
-	}
-
-	if e.page == nil {
-		return errors.ErrElementNoPage
-	}
-
-	if e.nodeID <= 0 && e.objectID == "" {
-		return errors.ErrElementInvalidNodeID
-	}
-
-	// Resolve nodeId to objectId
-	var objectID string
-	var err error
-	objectID, err = e.resolveObjectID()
-	if err != nil {
-		return fmt.Errorf("failed to resolve element: %w", err)
-	}
-
-	// Use CDP Runtime.callFunctionOn to hover over the element immediately
-	var hoverFunction string = `
-		function() {
-			var event = new MouseEvent('mouseover', {
-				'view': window,
-				'bubbles': true,
-				'cancelable': true
-			});
-			this.dispatchEvent(event);
-			return true;
-		}
-	`
-
-	var params map[string]interface{} = map[string]interface{}{
-		"functionDeclaration": hoverFunction,
-		"objectId":            objectID,
-		"returnByValue":       true,
-	}
-
-	var result map[string]interface{}
-	result, err = e.page.sendCommand(cdp.CmdRuntimeCallFunctionOn, params)
-	if err != nil {
-		return fmt.Errorf("failed to hover over element: %w", err)
-	}
-
-	// Check if the hover was successful
-	var success bool
-	var ok bool
-	success, ok = result["result"].(map[string]interface{})["value"].(bool)
-	if !ok || !success {
-		return errors.ErrHoverOperationFailed
-	}
-
-	return nil
-}
-
-// WaitAndHover performs a mouse hover over the element after waiting for it to be visible.
-//
-// This method waits for the element to be visible before performing the hover action.
-// It uses the element's default timeout. This is the recommended method for most use cases.
-func (e *Element) WaitAndHover() error {
-	if e == nil {
-		return errors.ErrElementNil
-	}
-
-	if e.page == nil {
-		return errors.ErrElementNoPage
-	}
-
-	if e.nodeID <= 0 && e.objectID == "" {
-		return errors.ErrElementInvalidNodeID
-	}
-
-	// Use CDP to wait for element to be visible using default timeout
-	var _, err error
-	_, err = e.page.WaitForElementVisible(e.selector, e.timeout)
-	if err != nil {
-		return fmt.Errorf("element not visible: %w", err)
-	}
-
-	// Resolve nodeId to objectId
-	var objectID string
-	objectID, err = e.resolveObjectID()
-	if err != nil {
-		return fmt.Errorf("failed to resolve element: %w", err)
-	}
-
-	// Use CDP Runtime.callFunctionOn to hover over the element
-	var hoverFunction string = `
-		function() {
-			var event = new MouseEvent('mouseover', {
-				'view': window,
-				'bubbles': true,
-				'cancelable': true
-			});
-			this.dispatchEvent(event);
-			return true;
-		}
-	`
-
-	var params map[string]interface{} = map[string]interface{}{
-		"functionDeclaration": hoverFunction,
-		"objectId":            objectID,
-		"returnByValue":       true,
-	}
-
-	var result map[string]interface{}
-	result, err = e.page.sendCommand(cdp.CmdRuntimeCallFunctionOn, params)
-	if err != nil {
-		return fmt.Errorf("failed to hover over element: %w", err)
-	}
-
-	// Check if the hover was successful
-	var success bool
-	var ok bool
-	success, ok = result["result"].(map[string]interface{})["value"].(bool)
-	if !ok || !success {
-		return errors.ErrHoverOperationFailed
-	}
-
-	return nil
-}
-
-// WaitAndHoverFor performs a mouse hover over the element after waiting for it to be visible with a custom timeout.
-//
-// This method waits for the element to be visible using the specified timeout.
-// Use this when you need more control over the wait time than the default timeout.
-func (e *Element) WaitAndHoverFor(timeout time.Duration) error {
-	// Validate timeout
-	if timeout < 1*time.Second {
-		return errors.TimeoutInvalidFormat(timeout)
-	}
-
-	if e == nil {
-		return errors.ErrElementNil
-	}
-
-	if e.page == nil {
-		return errors.ErrElementNoPage
-	}
-
-	if e.nodeID <= 0 && e.objectID == "" {
-		return errors.ErrElementInvalidNodeID
-	}
-
-	// Wait for element to be visible using custom timeout
-	var _, err error
-	_, err = e.page.WaitForElementVisible(e.selector, timeout)
-	if err != nil {
-		return fmt.Errorf("element not visible within %v: %w", timeout, err)
-	}
-
-	// Resolve nodeId to objectId
-	var objectID string
-	objectID, err = e.resolveObjectID()
-	if err != nil {
-		return fmt.Errorf("failed to resolve element: %w", err)
-	}
-
-	// Use CDP Runtime.callFunctionOn to hover over the element
-	var hoverFunction string = `
-		function() {
-			var event = new MouseEvent('mouseover', {
-				'view': window,
-				'bubbles': true,
-				'cancelable': true
-			});
-			this.dispatchEvent(event);
-			return true;
-		}
-	`
-
-	var params map[string]interface{} = map[string]interface{}{
-		"functionDeclaration": hoverFunction,
-		"objectId":            objectID,
-		"returnByValue":       true,
-	}
-
-	var result map[string]interface{}
-	result, err = e.page.sendCommand(cdp.CmdRuntimeCallFunctionOn, params)
-	if err != nil {
-		return fmt.Errorf("failed to hover over element: %w", err)
-	}
-
-	// Check if the hover was successful
-	var success bool
-	var ok bool
-	success, ok = result["result"].(map[string]interface{})["value"].(bool)
-	if !ok || !success {
-		return errors.ErrHoverOperationFailed
-	}
-
-	return nil
+	return e.Type(text)
 }

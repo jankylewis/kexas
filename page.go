@@ -209,7 +209,8 @@ func (p *Page) WaitForLoad(timeout time.Duration) error {
 func (p *Page) Close() error {
 	p.log.Debug("closing page")
 
-	_, err := p.sendCommand(cdp.CmdPageClose, nil)
+	var err error
+	_, err = p.sendCommand(cdp.CmdPageClose, nil)
 	if err != nil {
 		p.log.Error("failed to close page", "error", err)
 		return fmt.Errorf("failed to close page: %w", err)
@@ -293,6 +294,47 @@ func (p *Page) Title() (string, error) {
 	}
 
 	return title, nil
+}
+
+// SetContent sets the HTML content of the page using CDP Page.setDocumentContent.
+// This is useful for testing without requiring navigation.
+func (p *Page) SetContent(html string) error {
+	// Get the frame ID from the page's target
+	var frameResult map[string]interface{}
+	var err error
+	frameResult, err = p.sendCommand("Page.getFrameTree", nil)
+	if err != nil {
+		return fmt.Errorf("failed to get frame tree: %w", err)
+	}
+
+	var frameTree map[string]interface{}
+	var ok bool
+	frameTree, ok = frameResult["frameTree"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid frame tree response")
+	}
+
+	var frame map[string]interface{}
+	frame, ok = frameTree["frame"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid frame response")
+	}
+
+	var frameID string
+	frameID, ok = frame["id"].(string)
+	if !ok {
+		return fmt.Errorf("invalid frame ID")
+	}
+
+	_, err = p.sendCommand(cdp.CmdPageSetDocumentContent, map[string]interface{}{
+		"frameId": frameID,
+		"html":    html,
+	})
+	if err != nil {
+		return fmt.Errorf("set document content failed: %w", err)
+	}
+
+	return nil
 }
 
 // Evaluate executes a JavaScript expression and returns the result as an interface{}.

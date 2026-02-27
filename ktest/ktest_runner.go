@@ -86,11 +86,18 @@ func runRegisteredTests(tests []NamedTest) {
 		var testName string = test.Name
 		var testPassed bool = true
 
+		// Build display name: filename.ShortTestName
+		var shortName string = testName
+		if idx := strings.LastIndex(testName, "."); idx >= 0 {
+			shortName = testName[idx+1:]
+		}
+		var screenshotName string = fmt.Sprintf("%s.%s", test.Filename, shortName)
+
 		t.Run(testName, func(t KTestT) {
-			t.Logf("🧪 ktest: running %s", testName)
+			t.Logf("🧪 ktest: running %s", shortName)
 
 			// Launch new browser for this test only
-			fmt.Printf("🌐 ktest: launching browser for %s\n", testName)
+			fmt.Printf("🌐 ktest: launching browser for %s\n", shortName)
 			var opts *launcher.Options = launcher.DefaultOptions()
 			opts.Headless = config.Headless
 			if config.BrowserExecutable != "" {
@@ -128,7 +135,7 @@ func runRegisteredTests(tests []NamedTest) {
 
 					// Take screenshot on failure if enabled
 					if config.ScreenshotOnFail {
-						takeScreenshot(t, page, testName, config.ScreenshotDir)
+						takeScreenshot(t, page, screenshotName, config.ScreenshotDir)
 					}
 				}
 
@@ -143,11 +150,11 @@ func runRegisteredTests(tests []NamedTest) {
 			if t.Failed() {
 				testPassed = false
 				if config.ScreenshotOnFail {
-					takeScreenshot(t, page, testName, config.ScreenshotDir)
+					takeScreenshot(t, page, screenshotName, config.ScreenshotDir)
 				}
 			}
 
-			t.Logf("✅ ktest: %s completed", testName)
+			t.Logf("✅ ktest: %s completed", shortName)
 		})
 
 		// Store test result

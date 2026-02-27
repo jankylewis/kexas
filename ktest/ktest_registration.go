@@ -52,7 +52,7 @@ func GetRegisteredTests() []NamedTest {
 	allTests = append(allTests, registeredTests...)
 
 	// Add group tests
-	allGroups := GetAllGroups()
+	var allGroups []*GroupContext = GetAllGroups()
 	for _, group := range allGroups {
 		group.mu.RLock()
 		allTests = append(allTests, group.Tests...)
@@ -64,7 +64,7 @@ func GetRegisteredTests() []NamedTest {
 
 // GetTestsByGroup returns all tests for a specific group
 func GetTestsByGroup(groupName string) []NamedTest {
-	group := GetGroupByName(groupName)
+	var group *GroupContext = GetGroupByName(groupName)
 	if group == nil {
 		return nil
 	}
@@ -73,7 +73,7 @@ func GetTestsByGroup(groupName string) []NamedTest {
 	defer group.mu.RUnlock()
 
 	// Return a copy of the tests
-	tests := make([]NamedTest, len(group.Tests))
+	var tests []NamedTest = make([]NamedTest, len(group.Tests))
 	copy(tests, group.Tests)
 
 	return tests
@@ -92,7 +92,7 @@ func GetTestByName(testName string) *NamedTest {
 	}
 
 	// Search in group tests
-	allGroups := GetAllGroups()
+	var allGroups []*GroupContext = GetAllGroups()
 	for _, group := range allGroups {
 		group.mu.RLock()
 		for _, test := range group.Tests {
@@ -111,9 +111,9 @@ func CountTests() int {
 	testMutex.RLock()
 	defer testMutex.RUnlock()
 
-	count := len(registeredTests)
+	var count int = len(registeredTests)
 
-	allGroups := GetAllGroups()
+	var allGroups []*GroupContext = GetAllGroups()
 	for _, group := range allGroups {
 		group.mu.RLock()
 		count += len(group.Tests)
@@ -140,7 +140,7 @@ func PrintAllTests() {
 	}
 
 	// Print group tests
-	allGroups := GetAllGroups()
+	var allGroups []*GroupContext = GetAllGroups()
 	for _, group := range allGroups {
 		group.mu.RLock()
 		if len(group.Tests) > 0 {

@@ -134,7 +134,7 @@ func (am *AgentManager) Cleanup() {
 	am.mutex.Lock()
 	defer am.mutex.Unlock()
 
-	now := time.Now()
+	var now time.Time = time.Now()
 	var allStates []*AgentState = am.agentState.List()
 
 	for i := 0; i < len(allStates); i++ {

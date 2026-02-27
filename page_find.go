@@ -112,14 +112,38 @@ func (p *Page) findByID(id string) (*Element, error) {
 }
 
 // findByCSS finds an element using CSS selector.
+// Returns error if the selector matches zero or more than one element.
 func (p *Page) findByCSS(selector string) (*Element, error) {
 	p.log.Debug("finding element by CSS", "selector", selector)
 
-	// Use Runtime.evaluate with document.querySelector to find the element,
-	// then resolve it to a DOM node ID via DOM.requestNode.
+	// First, check match count using querySelectorAll
+	var countExpr string = fmt.Sprintf(
+		`document.querySelectorAll(%q).length`, selector,
+	)
+	var countResult map[string]interface{}
+	var err error
+	countResult, err = p.sendCommand(cdp.CmdRuntimeEvaluate, map[string]interface{}{
+		"expression":    countExpr,
+		"returnByValue": true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("CSS count check failed: %w", err)
+	}
+
+	var matchCount int = extractMatchCount(countResult)
+	if matchCount == 0 {
+		return nil, errors.ElementNotFound(selector)
+	}
+	if matchCount > 1 {
+		return nil, fmt.Errorf(
+			"selector %s matched %d elements, expected exactly 1",
+			selector, matchCount,
+		)
+	}
+
+	// Exactly 1 match — retrieve it with querySelector
 	var jsExpr string = fmt.Sprintf(`document.querySelector(%q)`, selector)
 	var result map[string]interface{}
-	var err error
 	result, err = p.sendCommand(cdp.CmdRuntimeEvaluate, map[string]interface{}{
 		"expression":    jsExpr,
 		"returnByValue": false,
@@ -196,6 +220,14 @@ func (p *Page) findByXPath(xpath string) (*Element, error) {
 		return nil, errors.ElementNotFound(xpath)
 	}
 
+	// Validate match count — error if more than 1 match
+	if resultCount > 1 {
+		return nil, fmt.Errorf(
+			"xpath %s matched %d elements, expected exactly 1",
+			xpath, int(resultCount),
+		)
+	}
+
 	// Get search results
 	var results map[string]interface{}
 	results, err = p.sendCommand(cdp.CmdDOMGetSearchResults, map[string]interface{}{
@@ -227,6 +259,25 @@ func (p *Page) findByXPath(xpath string) (*Element, error) {
 
 	p.log.Debug("element found by XPath", "xpath", xpath, "nodeID", nodeID)
 	return element, nil
+}
+
+// extractMatchCount extracts an integer count from a CDP Runtime.evaluate result.
+// Returns 0 if the result cannot be parsed.
+func extractMatchCount(result map[string]interface{}) int {
+	var resultObj map[string]interface{}
+	var ok bool
+	resultObj, ok = result["result"].(map[string]interface{})
+	if !ok {
+		return 0
+	}
+
+	var value float64
+	value, ok = resultObj["value"].(float64)
+	if !ok {
+		return 0
+	}
+
+	return int(value)
 }
 
 // FindByXPath finds an element using XPath selector.

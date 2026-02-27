@@ -270,7 +270,7 @@ func RunWithConfigInternal(t KTestT, suite interface{}, config *Config, testFilt
 	var suiteType reflect.Type = suiteValue.Type()
 
 	// Validate suite structure
-	baseSuite := validateAndSetupSuite(t, suiteValue)
+	var baseSuite *Suite = validateAndSetupSuite(t, suiteValue)
 	if baseSuite == nil {
 		return // Validation failed, error already reported
 	}
@@ -278,7 +278,9 @@ func RunWithConfigInternal(t KTestT, suite interface{}, config *Config, testFilt
 	baseSuite.config = config
 
 	// Setup test environment
-	browser, page := setupTestEnvironment(t, config)
+	var browser *kexas.Browser
+	var page *kexas.Page
+	browser, page = setupTestEnvironment(t, config)
 	if browser == nil || page == nil {
 		return // Setup failed, error already reported
 	}

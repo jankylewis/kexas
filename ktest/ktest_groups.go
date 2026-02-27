@@ -187,8 +187,8 @@ func GetGroupPath() string {
 		return ""
 	}
 
-	path := currentGroup.Name
-	parent := currentGroup.Parent
+	var path string = currentGroup.Name
+	var parent *GroupContext = currentGroup.Parent
 	for parent != nil {
 		path = parent.Name + "." + path
 		parent = parent.Parent
@@ -210,7 +210,7 @@ func RegisterTestWithGroup(name string, testFunc func(*kexas.Page, KTestT)) {
 	defer currentGroup.mu.Unlock()
 
 	// Create full test name with group path
-	fullName := GetGroupPath()
+	var fullName string = GetGroupPath()
 	if fullName != "" {
 		fullName = fullName + "." + name
 	} else {
@@ -237,7 +237,7 @@ func RegisterTestWithGroup(name string, testFunc func(*kexas.Page, KTestT)) {
 		baseFilename = strings.TrimSuffix(baseFilename, filepath.Ext(baseFilename))
 	}
 
-	namedTest := NamedTest{
+	var namedTest NamedTest = NamedTest{
 		Name:     fullName,
 		Func:     testFunc,
 		Filename: baseFilename,
@@ -370,7 +370,7 @@ func printGroup(group *GroupContext, indent int) {
 	defer group.mu.RUnlock()
 
 	// Print group name
-	indentStr := ""
+	var indentStr string = ""
 	for i := 0; i < indent; i++ {
 		indentStr += "  "
 	}

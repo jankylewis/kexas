@@ -28,16 +28,121 @@ var (
 	ErrNoDebuggerURL    error = errors.New("launcher: could not find debugger URL")
 )
 
-// isPortAvailable checks if a port is available for binding
+// killExistingChromeProcesses terminates any existing Chrome processes using the debugging port.
+// Also kills orphaned Chrome for Testing processes left behind by Ctrl+C.
+func killExistingChromeProcesses(port int) {
+	var log *logger.Logger = logger.New("launcher")
+	var killed bool = false
+
+	// Method 1: Kill processes using the specific port via lsof
+	var cmd *exec.Cmd = exec.Command("lsof", "-ti", fmt.Sprintf(":%d", port))
+	var output []byte
+	var err error
+	output, err = cmd.Output()
+	if err == nil && len(output) > 0 {
+		var pids []string = strings.Split(strings.TrimSpace(string(output)), "\n")
+		log.Info("found processes using port", "port", port, "count", len(pids))
+		for _, pid := range pids {
+			if pid == "" {
+				continue
+			}
+			log.Warn("killing process on port", "port", port, "pid", pid)
+			var killCmd *exec.Cmd = exec.Command("kill", "-9", pid)
+			var killErr error = killCmd.Run()
+			if killErr != nil {
+				log.Error("failed to kill process", "pid", pid, "err", killErr)
+			} else {
+				killed = true
+			}
+		}
+	}
+
+	// Method 2: Kill orphaned "Chrome for Testing" processes by name
+	// These may exist after Ctrl+C kills the Go process but leaves Chrome alive
+	var pgrepCmd *exec.Cmd = exec.Command("pgrep", "-f", "Google Chrome for Testing")
+	var pgrepOut []byte
+	var pgrepErr error
+	pgrepOut, pgrepErr = pgrepCmd.Output()
+	if pgrepErr == nil && len(pgrepOut) > 0 {
+		var orphanPids []string = strings.Split(strings.TrimSpace(string(pgrepOut)), "\n")
+		log.Warn("found orphaned Chrome for Testing processes", "count", len(orphanPids))
+		for _, pid := range orphanPids {
+			if pid == "" {
+				continue
+			}
+			log.Warn("killing orphaned Chrome process", "pid", pid)
+			var killCmd *exec.Cmd = exec.Command("kill", "-9", pid)
+			var killErr error = killCmd.Run()
+			if killErr != nil {
+				log.Error("failed to kill orphaned process", "pid", pid, "err", killErr)
+			} else {
+				killed = true
+			}
+		}
+	}
+
+	if !killed {
+		log.Info("no existing Chrome processes found on port", "port", port)
+		return
+	}
+
+	// Poll for port release (up to 5 seconds) — must be long enough for OS to reclaim
+	var start time.Time = time.Now()
+	for time.Since(start) < 5*time.Second {
+		if isPortAvailable(port) {
+			log.Info("port released after killing processes", "port", port, "elapsed", time.Since(start))
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	log.Warn("port may still be in use after killing processes", "port", port)
+}
+
 func isPortAvailable(port int) bool {
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	listener, err := net.Listen("tcp", addr)
+	var addr string = fmt.Sprintf("127.0.0.1:%d", port)
+	var listener net.Listener
+	var err error
+	listener, err = net.Listen("tcp", addr)
 	if err != nil {
 		// Port is in use
 		return false
 	}
 	listener.Close()
 	return true
+}
+
+// cleanStaleTempProfiles removes leftover kexas-chrome-* temp directories
+// from previous crashed runs. These stale profiles can cause Chrome to crash
+// on relaunch (mach_vm_read errors, shared memory conflicts).
+func cleanStaleTempProfiles(log *logger.Logger) {
+	var tmpDir string = os.TempDir()
+	var entries []os.DirEntry
+	var err error
+	entries, err = os.ReadDir(tmpDir)
+	if err != nil {
+		return
+	}
+
+	var cleaned int = 0
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if !strings.HasPrefix(entry.Name(), "kexas-chrome-") {
+			continue
+		}
+		var fullPath string = filepath.Join(tmpDir, entry.Name())
+		var removeErr error = os.RemoveAll(fullPath)
+		if removeErr != nil {
+			log.Debug("failed to clean stale profile", "path", fullPath, "err", removeErr)
+		} else {
+			cleaned++
+		}
+	}
+
+	if cleaned > 0 {
+		log.Info("cleaned stale temp profiles", "count", cleaned)
+	}
 }
 
 // Options configures browser launch behavior.
@@ -114,13 +219,26 @@ func Launch(ctx context.Context, opts *Options) (*Browser, error) {
 
 	log.Info("launching chromium", "headless", opts.Headless, "port", opts.Port)
 
+	// Kill any existing Chrome processes using the debugging port
+	log.Info("step 1: killing existing Chrome processes on port", "port", opts.Port)
+	killExistingChromeProcesses(opts.Port)
+
+	// Clean up stale temp profiles from previous crashed runs
+	cleanStaleTempProfiles(log)
+
+	// Settle delay: let the OS fully release shared memory after killing processes
+	// and removing stale profiles. Without this, Chrome may hit mach_vm_read errors.
+	time.Sleep(500 * time.Millisecond)
+
 	// Check if port is available before attempting to launch
+	log.Info("step 2: checking if port is available", "port", opts.Port)
 	if !isPortAvailable(opts.Port) {
 		cancel()
 		stdout.Close()
-		log.Error("port already in use", "port", opts.Port)
+		log.Error("port still in use after cleanup", "port", opts.Port)
 		return nil, fmt.Errorf("launcher: port %d is already in use - kill existing Chrome processes or wait for port release", opts.Port)
 	}
+	log.Info("step 3: port is available, starting Chrome", "port", opts.Port)
 
 	// Start the browser process
 	err = cmd.Start()
@@ -135,7 +253,7 @@ func Launch(ctx context.Context, opts *Options) (*Browser, error) {
 
 	// Extract WebSocket URL from stdout
 	var wsURL string
-	wsURL, err = extractDebuggerURL(stdout, 10*time.Second)
+	wsURL, err = extractDebuggerURL(stdout, 10*time.Second, log)
 	stdout.Close()
 	if err != nil {
 		cancel()
@@ -279,8 +397,6 @@ func buildArgs(opts *Options) ([]string, string) {
 	var args []string = []string{
 		fmt.Sprintf("--remote-debugging-port=%d", opts.Port),
 		fmt.Sprintf("--user-data-dir=%s", userDataDir),
-		"--force-app-mode",         // Makes it look like a standalone app
-		"--app-name=Kexas Browser", // Custom app name
 		"--no-first-run",
 		"--no-default-browser-check",
 		"--disable-background-networking",
@@ -292,6 +408,7 @@ func buildArgs(opts *Options) ([]string, string) {
 		"--disable-default-apps",
 		"--disable-dev-shm-usage",
 		"--disable-extensions",
+		"--disable-gpu",
 		"--disable-features=TranslateUI",
 		"--disable-hang-monitor",
 		"--disable-ipc-flooding-protection",
@@ -304,7 +421,8 @@ func buildArgs(opts *Options) ([]string, string) {
 		"--no-service-autorun",
 		"--password-store=basic",
 		"--use-mock-keychain",
-		"--disable-blink-features=AutomationControlled",
+		"--disable-infobars",
+		"--disable-crash-reporter",
 		"--window-size=1920,1080",
 	}
 
@@ -319,7 +437,7 @@ func buildArgs(opts *Options) ([]string, string) {
 }
 
 // extractDebuggerURL reads the browser stdout and extracts the WebSocket URL.
-func extractDebuggerURL(file *os.File, timeout time.Duration) (string, error) {
+func extractDebuggerURL(file *os.File, timeout time.Duration, log *logger.Logger) (string, error) {
 	var deadline time.Time = time.Now().Add(timeout)
 	var pattern *regexp.Regexp = regexp.MustCompile(`ws://[^\s]+`)
 
@@ -329,16 +447,34 @@ func extractDebuggerURL(file *os.File, timeout time.Duration) (string, error) {
 
 		for scanner.Scan() {
 			var line string = scanner.Text()
+			// Check for DevTools URL
 			if strings.Contains(line, "DevTools listening on") {
 				var match string = pattern.FindString(line)
 				if match != "" {
 					return match, nil
 				}
 			}
+			// Log errors from Chrome
+			if strings.Contains(line, "ERROR") || strings.Contains(line, "FATAL") {
+				log.Error("chrome error", "msg", line)
+			}
+			// Log if port binding failed
+			if strings.Contains(line, "bind") && strings.Contains(line, "address already in use") {
+				return "", fmt.Errorf("chrome cannot bind to port - address already in use: %s", line)
+			}
 		}
 
 		time.Sleep(100 * time.Millisecond)
 	}
+
+	// Timeout - read what we have for diagnostics
+	file.Seek(0, 0)
+	var scanner *bufio.Scanner = bufio.NewScanner(file)
+	var lastLines []string
+	for scanner.Scan() && len(lastLines) < 20 {
+		lastLines = append(lastLines, scanner.Text())
+	}
+	log.Error("timeout waiting for debugger URL", "lastOutput", lastLines)
 
 	return "", ErrNoDebuggerURL
 }

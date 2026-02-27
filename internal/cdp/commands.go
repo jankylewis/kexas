@@ -4,16 +4,16 @@ package cdp
 type Command struct {
 	// Method is the CDP method name (e.g., "DOM.querySelector")
 	Method string
-	
+
 	// Description explains what this command does
 	Description string
-	
+
 	// Category groups related commands (e.g., "DOM", "Page", "Runtime")
 	Category string
-	
+
 	// Deprecated indicates if this command is deprecated
 	Deprecated bool
-	
+
 	// Since indicates the Chrome version when this command was introduced
 	Since string
 }
@@ -29,7 +29,7 @@ var Commands = map[string]Command{
 		Since:       "Chrome 63",
 	},
 	"Page.waitForLoadState": {
-		Method:      "Page.waitForLoadState", 
+		Method:      "Page.waitForLoadState",
 		Description: "Waits for the page to reach a specific load state",
 		Category:    "Page",
 		Deprecated:  false,
@@ -38,7 +38,7 @@ var Commands = map[string]Command{
 	"Page.close": {
 		Method:      "Page.close",
 		Description: "Closes the current page",
-		Category:    "Page", 
+		Category:    "Page",
 		Deprecated:  false,
 		Since:       "Chrome 63",
 	},
@@ -49,7 +49,7 @@ var Commands = map[string]Command{
 		Deprecated:  false,
 		Since:       "Chrome 63",
 	},
-	
+
 	// DOM Commands - Document Object Model manipulation
 	"DOM.performSearch": {
 		Method:      "DOM.performSearch",
@@ -107,7 +107,7 @@ var Commands = map[string]Command{
 		Deprecated:  false,
 		Since:       "Chrome 63",
 	},
-	
+
 	// Runtime Commands - JavaScript execution
 	"Runtime.evaluate": {
 		Method:      "Runtime.evaluate",
@@ -127,7 +127,9 @@ var Commands = map[string]Command{
 
 // GetCommand returns a command from the registry.
 func GetCommand(method string) (Command, bool) {
-	cmd, exists := Commands[method]
+	var cmd Command
+	var exists bool
+	cmd, exists = Commands[method]
 	return cmd, exists
 }
 
@@ -144,11 +146,11 @@ func ListCommands(category string) []Command {
 
 // AllCategories returns all command categories.
 func AllCategories() []string {
-	categories := make(map[string]bool)
+	var categories map[string]bool = make(map[string]bool)
 	for _, cmd := range Commands {
 		categories[cmd.Category] = true
 	}
-	
+
 	var result []string
 	for category := range categories {
 		result = append(result, category)
@@ -158,13 +160,17 @@ func AllCategories() []string {
 
 // IsDeprecated checks if a command is deprecated.
 func IsDeprecated(method string) bool {
-	cmd, exists := Commands[method]
+	var cmd Command
+	var exists bool
+	cmd, exists = Commands[method]
 	return exists && cmd.Deprecated
 }
 
 // GetCommandDescription returns a human-readable description of the command.
 func GetCommandDescription(method string) string {
-	cmd, exists := Commands[method]
+	var cmd Command
+	var exists bool
+	cmd, exists = Commands[method]
 	if !exists {
 		return "Unknown command"
 	}

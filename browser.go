@@ -175,13 +175,59 @@ func (b *Browser) attachToPage(targetID string) (*Page, error) {
 		"platform":       "macOS",
 	})
 
-	// Stealth: patch navigator.webdriver before any page scripts run
+	// Stealth: comprehensive automation fingerprint removal
+	// Based on puppeteer-extra-plugin-stealth techniques
 	_, _ = b.client.SendToSession(b.ctx, sessionID, "Page.addScriptToEvaluateOnNewDocument", map[string]interface{}{
 		"source": `
+			// 1. Remove navigator.webdriver
 			Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-			Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+
+			// 2. Fake plugins array (Chrome normally has PDF plugins)
+			Object.defineProperty(navigator, 'plugins', {
+				get: () => {
+					var arr = [
+						{name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format'},
+						{name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: ''},
+						{name: 'Native Client', filename: 'internal-nacl-plugin', description: ''},
+					];
+					arr.item = function(i) { return this[i]; };
+					arr.namedItem = function(name) { return this.find(function(p) { return p.name === name; }); };
+					arr.refresh = function() {};
+					return arr;
+				}
+			});
+
+			// 3. Fake languages
 			Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
-			window.chrome = {runtime: {}};
+
+			// 4. Fake chrome runtime (must exist and look real)
+			window.chrome = {runtime: {}, loadTimes: function() {}, csi: function() {}};
+
+			// 5. Fake permissions API to not reveal automation
+			var origQuery = window.navigator.permissions.query;
+			window.navigator.permissions.query = function(parameters) {
+				if (parameters.name === 'notifications') {
+					return Promise.resolve({state: Notification.permission});
+				}
+				return origQuery(parameters);
+			};
+
+			// 6. Prevent iframe detection of automation
+			Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+				get: function() {
+					return new Proxy(window, {
+						get: function(target, prop) {
+							if (prop === 'chrome') return window.chrome;
+							return Reflect.get(target, prop);
+						}
+					});
+				}
+			});
+
+			// 7. Fix Notification.permission for headless
+			if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
+				Object.defineProperty(Notification, 'permission', {get: () => 'default'});
+			}
 		`,
 	})
 

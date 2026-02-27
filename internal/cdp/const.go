@@ -2,27 +2,28 @@ package cdp
 
 // Page Command Constants
 const (
-	CmdPageNavigate         = "Page.navigate"
-	CmdPageWaitForLoadState = "Page.waitForLoadState"
-	CmdPageClose            = "Page.close"
-	CmdPageCaptureScreenshot = "Page.captureScreenshot"
+	CmdPageNavigate           = "Page.navigate"
+	CmdPageWaitForLoadState   = "Page.waitForLoadState"
+	CmdPageClose              = "Page.close"
+	CmdPageCaptureScreenshot  = "Page.captureScreenshot"
+	CmdPageSetDocumentContent = "Page.setDocumentContent"
 )
 
 // DOM Command Constants
 const (
 	CmdDOMPerformSearch    = "DOM.performSearch"
 	CmdDOMGetSearchResults = "DOM.getSearchResults"
-	CmdDOMQuerySelector     = "DOM.querySelector"
-	CmdDOMGetComputedStyle  = "DOM.getComputedStyle"
-	CmdDOMGetBoxModel       = "DOM.getBoxModel"
-	CmdDOMGetAttributes     = "DOM.getAttributes"
-	CmdDOMGetOuterHTML      = "DOM.getOuterHTML"
-	CmdDOMDescribeNode      = "DOM.describeNode"
+	CmdDOMQuerySelector    = "DOM.querySelector"
+	CmdDOMGetComputedStyle = "DOM.getComputedStyle"
+	CmdDOMGetBoxModel      = "DOM.getBoxModel"
+	CmdDOMGetAttributes    = "DOM.getAttributes"
+	CmdDOMGetOuterHTML     = "DOM.getOuterHTML"
+	CmdDOMDescribeNode     = "DOM.describeNode"
 )
 
 // Runtime Command Constants
 const (
-	CmdRuntimeEvaluate      = "Runtime.evaluate"
+	CmdRuntimeEvaluate       = "Runtime.evaluate"
 	CmdRuntimeCallFunctionOn = "Runtime.callFunctionOn"
 )
 
@@ -41,8 +42,9 @@ var (
 		CmdPageWaitForLoadState,
 		CmdPageClose,
 		CmdPageCaptureScreenshot,
+		CmdPageSetDocumentContent,
 	}
-	
+
 	// DOM Commands - Document Object Model manipulation
 	DOMCommands = []string{
 		CmdDOMPerformSearch,
@@ -54,13 +56,13 @@ var (
 		CmdDOMGetOuterHTML,
 		CmdDOMDescribeNode,
 	}
-	
+
 	// Runtime Commands - JavaScript execution
 	RuntimeCommands = []string{
 		CmdRuntimeEvaluate,
 		CmdRuntimeCallFunctionOn,
 	}
-	
+
 	// All Commands - Complete registry
 	AllCommands = append(append(PageCommands, DOMCommands...), RuntimeCommands...)
 )

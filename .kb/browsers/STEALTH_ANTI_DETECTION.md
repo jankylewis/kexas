@@ -49,10 +49,22 @@ Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
 
 **Detection:** Headless Chrome has an empty `navigator.plugins` array. Real browsers always have plugins.
 
-**Fix:**
+**Fix:** Fake a realistic plugins array matching real Chrome (PDF Plugin, PDF Viewer, Native Client):
 
 ```javascript
-Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+Object.defineProperty(navigator, 'plugins', {
+    get: () => {
+        var arr = [
+            {name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format'},
+            {name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: ''},
+            {name: 'Native Client', filename: 'internal-nacl-plugin', description: ''},
+        ];
+        arr.item = function(i) { return this[i]; };
+        arr.namedItem = function(name) { return this.find(function(p) { return p.name === name; }); };
+        arr.refresh = function() {};
+        return arr;
+    }
+});
 ```
 
 ### 4. navigator.languages
@@ -67,13 +79,59 @@ Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
 
 ### 5. window.chrome Object
 
-**Detection:** Real Chrome browsers have a `window.chrome` object with a `runtime` property. Headless Chrome does not.
+**Detection:** Real Chrome browsers have a `window.chrome` object with `runtime`, `loadTimes`, and `csi` properties. Headless Chrome does not.
 
 **Fix:**
 
 ```javascript
-window.chrome = {runtime: {}};
+window.chrome = {runtime: {}, loadTimes: function() {}, csi: function() {}};
 ```
+
+### 6. Permissions API
+
+**Detection:** Automated browsers may return inconsistent `Notification.permission` via the Permissions API.
+
+**Fix:**
+
+```javascript
+var origQuery = window.navigator.permissions.query;
+window.navigator.permissions.query = function(parameters) {
+    if (parameters.name === 'notifications') {
+        return Promise.resolve({state: Notification.permission});
+    }
+    return origQuery(parameters);
+};
+```
+
+### 7. iframe contentWindow Detection
+
+**Detection:** Bot detectors use iframes to check if `window.chrome` exists in child frames.
+
+**Fix:**
+
+```javascript
+Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+    get: function() {
+        return new Proxy(window, {
+            get: function(target, prop) {
+                if (prop === 'chrome') return window.chrome;
+                return Reflect.get(target, prop);
+            }
+        });
+    }
+});
+```
+
+### 8. Chrome Launch Flags (Critical Lesson)
+
+**NEVER use `--disable-blink-features=AutomationControlled` as a Chrome flag.**
+
+This flag causes Chrome to show a yellow "unsupported command-line flag" banner, which:
+1. Visually alerts that the browser is automated
+2. Is detectable by websites (banner DOM element exists)
+3. Is redundant — `navigator.webdriver` is already patched via CDP JS injection
+
+Use `--disable-infobars` instead to suppress all info bars.
 
 ---
 

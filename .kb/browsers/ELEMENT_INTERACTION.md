@@ -87,43 +87,46 @@ var focusFunction string = `
 // Runtime.callFunctionOn with objectId
 ```
 
-#### Phase 2: Type each character via CDP keyboard events
+#### Phase 2: Type each character via CDP keyboard events (Playwright pattern)
+
+**Critical: 3 events per character — keyDown → char → keyUp**
+
 ```go
 for _, ch := range text {
     var charStr string = string(ch)
 
-    // keyDown event
+    // keyDown (no "text" — only identifies which key was pressed)
+    Input.dispatchKeyEvent({type: "keyDown", key: charStr})
+
+    // char (carries "text" — this inserts the character)
     Input.dispatchKeyEvent({
-        type:           "keyDown",
+        type:           "char",
         text:           charStr,
         unmodifiedText: charStr,
         key:            charStr,
     })
 
-    // keyUp event
-    Input.dispatchKeyEvent({
-        type:           "keyUp",
-        text:           charStr,
-        unmodifiedText: charStr,
-        key:            charStr,
-    })
+    // keyUp (no "text" — only signals key release)
+    Input.dispatchKeyEvent({type: "keyUp", key: charStr})
 }
 ```
 
+**Critical lesson: keyDown must NOT include "text".** If `keyDown` has `text`, Chrome inserts the character on `keyDown`, then the `char` event inserts it again → every character is doubled (e.g., `ssttaannddaarrdd__uusseerr`).
+
 ### Why Input.dispatchKeyEvent Instead of JavaScript Value Assignment
 
-The original implementation used `this.value = text` via `Runtime.callFunctionOn`. This failed on Amazon's SPA because:
+The original implementation used `this.value = text` via `Runtime.callFunctionOn`. This failed because:
 
-1. **SPA frameworks (React, Angular) listen to actual keyboard events**, not value property changes
+1. **SPA frameworks (React, Angular) and even simple forms listen to actual keyboard events**, not value property changes
 2. Setting `this.value` bypasses the framework's event handlers
 3. The form field appears filled but the framework's internal state doesn't update
-4. Clicking "Continue" after JS-only typing causes the form to submit with empty/stale data
+4. Sauce Labs demo site returned "Epic sadface: Username is required" despite showing the username in the input
 
-**`Input.dispatchKeyEvent` is the go-rod/Playwright pattern:**
+**The Playwright-style `keyDown → char → keyUp` pattern:**
 - Simulates real keyboard input at the browser level
-- Triggers `keydown`, `keypress`, `input`, `keyup` events naturally
-- SPA frameworks detect and process each keystroke
-- Form validation and state management work correctly
+- The `char` event is what actually inserts text into the input
+- Triggers `keydown`, `input`, `keyup` events naturally
+- Works universally: vanilla HTML forms, React, Vue, Angular, Sauce Labs, Amazon, X
 
 ### Input Domain Auto-Enablement
 
@@ -135,39 +138,23 @@ case "Input.dispatchKeyEvent", "Input.dispatchMouseEvent", "Input.dispatchTouchE
     return nil
 ```
 
-### `WaitAndType(text)` — Wait for visible, then type
+### `WaitAndType(text)` — Wait for visible, then delegate to Type()
 
-**Note:** This method still uses the old JS `this.value = text` approach. For SPA forms, use `Type()` directly after finding the element with `Find()`.
+Waits for the element to be visible using the default timeout, then calls `e.Type(text)` which uses real key events. All three typing methods now share the same underlying implementation.
 
-```go
-// WaitAndType uses JS value assignment (works for simple forms)
-var typeFunction string = `
-    function(text) {
-        this.focus();
-        this.value = '';
-        this.value = text;
-        return true;
-    }
-`
-```
+### `WaitAndTypeFor(text, timeout)` — Same with custom timeout
 
-### `WaitAndTypeFor(text, timeout)` — Same with custom timeout and event dispatch
-
-This variant also dispatches `input` and `change` events after setting the value:
-
-```go
-this.dispatchEvent(new Event('input', { bubbles: true }));
-this.dispatchEvent(new Event('change', { bubbles: true }));
-```
+Validates `timeout >= 1s`, waits for visibility, then calls `e.Type(text)`.
 
 ### Typing Method Selection Guide
 
-| Scenario | Recommended Method |
-|----------|-------------------|
-| SPA forms (React, Angular, Amazon) | `Type()` — uses `Input.dispatchKeyEvent` |
-| Simple HTML forms | `WaitAndType()` — uses JS value assignment |
-| Forms with custom validation | `Type()` — triggers real keyboard events |
-| Forms needing input/change events | `WaitAndTypeFor()` — dispatches events after assignment |
+| Method | Behavior |
+|--------|----------|
+| `Type(text)` | Immediate — focus, clear, type via key events |
+| `WaitAndType(text)` | Wait for visible (default timeout) → `Type(text)` |
+| `WaitAndTypeFor(text, timeout)` | Wait for visible (custom timeout) → `Type(text)` |
+
+All three methods use the same `keyDown → char → keyUp` pattern. Choose based on whether you need to wait for visibility.
 
 ---
 
