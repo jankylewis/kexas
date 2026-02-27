@@ -40,8 +40,9 @@ func runRegisteredTests(tests []NamedTest) {
 
 	// Track test results for detailed summary
 	type testResult struct {
-		name   string
-		passed bool
+		name     string
+		passed   bool
+		filename string
 	}
 	var testResults []testResult
 
@@ -150,7 +151,11 @@ func runRegisteredTests(tests []NamedTest) {
 		})
 
 		// Store test result
-		testResults = append(testResults, testResult{name: testName, passed: testPassed})
+		testResults = append(testResults, testResult{
+			name:     testName,
+			passed:   testPassed,
+			filename: test.Filename,
+		})
 	}
 
 	// Execute global AfterAll hook
@@ -163,10 +168,11 @@ func runRegisteredTests(tests []NamedTest) {
 		fmt.Printf("\nAll %d tests finished:\n", len(filteredTests))
 	}
 	for _, result := range testResults {
+		var displayName string = fmt.Sprintf("%s.%s", result.filename, result.name)
 		if result.passed {
-			fmt.Printf("%s passed\n", result.name)
+			fmt.Printf("%s passed\n", displayName)
 		} else {
-			fmt.Printf("%s failed\n", result.name)
+			fmt.Printf("%s failed\n", displayName)
 		}
 	}
 

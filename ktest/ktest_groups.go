@@ -2,6 +2,9 @@ package ktest
 
 import (
 	"fmt"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
 
 	"github.com/kexas-project/kexas"
@@ -27,8 +30,9 @@ import (
 
 // NamedTest represents a named test function
 type NamedTest struct {
-	Name string
-	Func func(*kexas.Page, KTestT) // Add KTestT for kassert support
+	Name     string
+	Func     func(*kexas.Page, KTestT) // Add KTestT for kassert support
+	Filename string                    // Source filename without extension
 }
 
 // Global test registration
@@ -42,12 +46,27 @@ func registerNamedTest(name string, testFunc func(*kexas.Page, KTestT)) {
 	testMutex.Lock()
 	defer testMutex.Unlock()
 
-	namedTest := NamedTest{
-		Name: name,
-		Func: testFunc,
+	// Get filename from caller
+	var filename string
+	for depth := 2; depth <= 5; depth++ {
+		var _, file, _, _ = runtime.Caller(depth)
+		if file != "" && !strings.Contains(file, "ktest") && !strings.Contains(file, "kexas") {
+			filename = file
+			break
+		}
 	}
 
-	registeredTests = append(registeredTests, namedTest)
+	var baseFilename string = "test"
+	if filename != "" {
+		baseFilename = filepath.Base(filename)
+		baseFilename = strings.TrimSuffix(baseFilename, filepath.Ext(baseFilename))
+	}
+
+	registeredTests = append(registeredTests, NamedTest{
+		Name:     name,
+		Func:     testFunc,
+		Filename: baseFilename,
+	})
 	fmt.Printf("✅ Registered root-level test: %s\n", name)
 }
 
@@ -194,9 +213,26 @@ func RegisterTestWithGroup(name string, testFunc func(*kexas.Page, KTestT)) {
 		fullName = name
 	}
 
+	// Get filename from caller
+	var filename string
+	for depth := 2; depth <= 5; depth++ {
+		var _, file, _, _ = runtime.Caller(depth)
+		if file != "" && !strings.Contains(file, "ktest") && !strings.Contains(file, "kexas") {
+			filename = file
+			break
+		}
+	}
+
+	var baseFilename string = "test"
+	if filename != "" {
+		baseFilename = filepath.Base(filename)
+		baseFilename = strings.TrimSuffix(baseFilename, filepath.Ext(baseFilename))
+	}
+
 	namedTest := NamedTest{
-		Name: fullName,
-		Func: testFunc,
+		Name:     fullName,
+		Func:     testFunc,
+		Filename: baseFilename,
 	}
 
 	currentGroup.Tests = append(currentGroup.Tests, namedTest)
