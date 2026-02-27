@@ -203,11 +203,17 @@ async function createPage() {
 }
 ```
 
-### **Pattern 3: Broken Enablement (Current Kexas)**
-```javascript
-// No enablement at all - assumes agents are magically enabled
-async function find(selector) {
-  return await cdp.send('DOM.querySelector'); // ❌ FAILS: DOM agent not enabled
+### **Pattern 3: Hybrid Enablement (Current Kexas)**
+```go
+// Kexas uses a hybrid approach:
+// - Stealth domains (Network, Page) are enabled eagerly in attachToPage()
+// - Operational domains (DOM, Runtime) are enabled lazily via AgentManager.EnsureAgent()
+// - Input domain is auto-enabled (no .enable() call needed)
+
+func (p *Page) sendCommand(method string, params map[string]interface{}) {
+    // ensureAgentsForCommand auto-enables the required domain
+    p.ensureAgentsForCommand(method)  // e.g. "Runtime.evaluate" → EnsureAgent("Runtime")
+    p.client.SendToSession(p.ctx, p.sessionID, method, params)
 }
 ```
 

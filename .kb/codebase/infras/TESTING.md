@@ -522,6 +522,82 @@ jobs:
 
 ---
 
+## Early Bailout Pattern (Updated February 27, 2026)
+
+Integration tests that involve multi-step browser flows should **abort immediately on first failure** instead of continuing through doomed subsequent steps.
+
+### Why Not `t.Fatal()` / `t.Fatalf()`
+
+The `KTestT` interface's `Fatal` and `Fatalf` call `os.Exit(1)`, which:
+- Kills the entire process immediately
+- Skips `defer` cleanup (browser close, temp file removal)
+- Leaves orphan Chromium processes and occupied ports
+
+### Recommended Pattern: `t.Errorf()` + `return`
+
+```go
+func TestAmazonSignInComplete(t ktest.KTestT) {
+    // Step 1: Navigate
+    err = page.Navigate("https://www.amazon.com/")
+    if err != nil {
+        t.Errorf("Step 1 failed: %v", err)
+        return  // Bail out, defer cleanup still runs
+    }
+
+    // Step 2: Find sign-in link
+    signInLink, err := page.Find("a[data-nav-ref='nav_ya_signin']")
+    if err != nil {
+        t.Errorf("Step 2 failed: %v", err)
+        return
+    }
+
+    // ... subsequent steps follow same pattern
+}
+```
+
+**Benefits**:
+- `defer` blocks execute normally (browser closes, ports released)
+- Clear error message identifies exactly which step failed
+- No wasted 10-second `Find()` timeout per subsequent doomed step
+
+---
+
+## Port Conflict Between Sequential Tests (Updated February 27, 2026)
+
+When running multiple browser tests sequentially, the OS may not release the debugging port (default: 9222) immediately after the browser process is killed.
+
+### Symptom
+```
+failed to extract debugger URL: ...
+```
+
+### Root Cause
+The previous test's `Browser.Close()` → `Launcher.Close()` kills the Chromium process, but the OS may hold the port in `TIME_WAIT` state for several hundred milliseconds.
+
+### Fix
+`launcher.Close()` includes a `time.Sleep(2 * time.Second)` after killing the process to ensure the port is fully released:
+
+```go
+func (l *Launcher) Close() error {
+    // Kill browser process
+    l.cmd.Process.Kill()
+    l.cmd.Wait()
+    // Wait for port release
+    time.Sleep(2 * time.Second)
+    // Clean up temp profile
+    os.RemoveAll(l.tempDir)
+}
+```
+
+### Test Selector Best Practices
+
+When writing selectors for real-world sites:
+- **Avoid hardcoded IDs** that change between site updates (e.g., `#continue`, `#auth-signin-button`)
+- **Prefer attribute selectors** that are more stable (e.g., `input[type='submit']`)
+- **Use data attributes** when available (e.g., `a[data-nav-ref='nav_ya_signin']`)
+
+---
+
 ## Summary
 
 Testing strategy:
@@ -530,5 +606,7 @@ Testing strategy:
 - **Naming**: `Test<Function>_<Scenario>`
 - **Framework**: Standard `testing` for units, `ktest` for integration
 - **Assertions**: Use `kassert` for clear, fluent assertions
+- **Early bailout**: Use `t.Errorf()` + `return`, never `t.Fatal()` (preserves defer cleanup)
+- **Port conflicts**: 2s sleep in `Launcher.Close()` between sequential tests
 - **Coverage**: Critical paths first, then errors, then edge cases
 

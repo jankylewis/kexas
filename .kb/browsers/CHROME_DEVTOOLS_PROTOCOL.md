@@ -61,6 +61,7 @@ Chrome DevTools Protocol
 - **Mouse**: `Input.dispatchMouseEvent`, `Input.synthesizePinchGesture`
 - **Keyboard**: `Input.dispatchKeyEvent`, `Input.insertText`
 - **Touch**: `Input.dispatchTouchEvent`, `Input.synthesizeTapGesture`
+- **Auto-enabled**: Input domain does NOT require `.enable()` — it is always available
 
 ---
 
@@ -68,6 +69,7 @@ Chrome DevTools Protocol
 
 ### **Default Enabled Agents:**
 When you connect to Chrome CDP, **only Page agent is enabled by default**.
+**Input agent is auto-enabled** (no `.enable()` call needed).
 
 ### **Manual Enablement Required:**
 ```javascript
@@ -75,7 +77,7 @@ When you connect to Chrome CDP, **only Page agent is enabled by default**.
 Runtime.enable()  // For JavaScript execution
 DOM.enable()      // For element finding
 Network.enable()  // For request interception
-Input.enable()    // For mouse/keyboard simulation
+// Input does NOT need .enable() — it's auto-enabled
 ```
 
 ### **Why Manual Enablement?**
@@ -111,9 +113,37 @@ Runtime.callFunctionOn({functionDeclaration: "function() { return window.locatio
 
 ### **User Interaction:**
 ```javascript
-Input.enable()
+// Input domain is auto-enabled — no Input.enable() needed
 Input.dispatchMouseEvent({type: "mousePressed", x: 100, y: 200})
-Input.dispatchKeyEvent({type: "char", text: "hello"})
+Input.dispatchKeyEvent({type: "keyDown", text: "h", key: "h", unmodifiedText: "h"})
+Input.dispatchKeyEvent({type: "keyUp",   text: "h", key: "h", unmodifiedText: "h"})
+```
+
+### **Typing with Input.dispatchKeyEvent (SPA-Compatible):**
+```javascript
+// For each character, send keyDown + keyUp pair:
+for (const ch of "hello") {
+    Input.dispatchKeyEvent({type: "keyDown", text: ch, unmodifiedText: ch, key: ch})
+    Input.dispatchKeyEvent({type: "keyUp",   text: ch, unmodifiedText: ch, key: ch})
+}
+
+// Why per-character instead of Input.insertText:
+// - SPA frameworks (React, Angular) listen to keydown/keyup events
+// - Input.insertText bypasses those event listeners
+// - Per-character keyDown+keyUp triggers the full event chain:
+//   keydown → keypress → input → keyup
+// - This is how go-rod and Playwright handle typing
+```
+
+### **Why NOT JavaScript this.value = text:**
+```javascript
+// ❌ WRONG for SPA forms:
+Runtime.callFunctionOn({functionDeclaration: "function(t) { this.value = t; }", ...})
+// Sets the DOM property but does NOT trigger React/Angular state updates
+// Form submission will use the old/empty state
+
+// ✅ CORRECT for SPA forms:
+// Use Input.dispatchKeyEvent per character (see above)
 ```
 
 ---
@@ -149,6 +179,44 @@ DOM.querySelector({selector: "#button"})  // Page might not be loaded
 Page.navigate({url: "..."})
 Page.loadEventFired  // Wait for this event
 DOM.querySelector({selector: "#button"})
+```
+
+### **4. nodeId vs objectId Confusion**
+```javascript
+// nodeId: integer, from DOM domain, goes stale after navigation
+// objectId: string, from Runtime domain, preferred for interactions
+
+// ❌ WRONG - nodeId becomes stale after page navigation
+var nodeId = DOM.querySelector({selector: "#button"}).nodeId;
+Page.navigate({url: "..."});
+DOM.getAttributes({nodeId: nodeId}); // FAILS: "Could not find node with given id"
+
+// ✅ CORRECT - Use Runtime.evaluate to get objectId
+var result = Runtime.evaluate({expression: 'document.querySelector("#button")', returnByValue: false});
+var objectId = result.result.objectId;
+Runtime.callFunctionOn({objectId: objectId, functionDeclaration: "function() { this.click(); }"});
+```
+
+### **5. JSON Number Type Assertions (Go-specific)**
+```go
+// CDP returns numbers as float64 in JSON, not int64 or string
+// ❌ WRONG:
+nodeID, ok := nodeIDs[0].(int64)   // panics
+nodeID, ok := nodeIDs[0].(string)  // panics
+
+// ✅ CORRECT:
+nodeIDFloat, ok := nodeIDs[0].(float64)
+nodeID := cdp.NodeID(int64(nodeIDFloat))
+```
+
+### **6. Network.enable Before setUserAgentOverride**
+```javascript
+// ❌ WRONG - Override silently ignored
+Network.setUserAgentOverride({userAgent: "..."})
+
+// ✅ CORRECT - Enable domain first
+Network.enable()
+Network.setUserAgentOverride({userAgent: "..."})
 ```
 
 ---
