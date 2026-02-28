@@ -15,6 +15,7 @@
 package kassert
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 )
@@ -54,6 +55,9 @@ func (a *Assertion) Equals(expected interface{}) *Assertion {
 	if !reflect.DeepEqual(a.actual, expected) {
 		a.t.Helper()
 		a.t.Errorf("Expected %s to equal:\n  %v\nbut got:\n  %v", a.name, expected, a.actual)
+		logFail(a.name, fmt.Sprintf("Equals(%v) — got %v", expected, a.actual))
+	} else {
+		logPass(a.name, fmt.Sprintf("Equals(%v)", expected))
 	}
 	return a
 }
@@ -63,6 +67,9 @@ func (a *Assertion) NotEquals(unexpected interface{}) *Assertion {
 	if reflect.DeepEqual(a.actual, unexpected) {
 		a.t.Helper()
 		a.t.Errorf("Expected %s to not equal:\n  %v", a.name, unexpected)
+		logFail(a.name, fmt.Sprintf("NotEquals(%v)", unexpected))
+	} else {
+		logPass(a.name, fmt.Sprintf("NotEquals(%v)", unexpected))
 	}
 	return a
 }
@@ -72,6 +79,9 @@ func (a *Assertion) IsNil() *Assertion {
 	if a.actual != nil && !reflect.ValueOf(a.actual).IsNil() {
 		a.t.Helper()
 		a.t.Errorf("Expected %s to be nil, but got:\n  %v", a.name, a.actual)
+		logFail(a.name, "IsNil")
+	} else {
+		logPass(a.name, "IsNil")
 	}
 	return a
 }
@@ -104,11 +114,15 @@ func (a *Assertion) IsTrue() *Assertion {
 	if !ok {
 		a.t.Helper()
 		a.t.Errorf("Expected %s to be a bool, but got type %T", a.name, a.actual)
+		logFail(a.name, "IsTrue — not a bool")
 		return a
 	}
 	if !b {
 		a.t.Helper()
 		a.t.Errorf("Expected %s to be true, but got false", a.name)
+		logFail(a.name, "IsTrue")
+	} else {
+		logPass(a.name, "IsTrue")
 	}
 	return a
 }
@@ -121,11 +135,15 @@ func (a *Assertion) IsFalse() *Assertion {
 	if !ok {
 		a.t.Helper()
 		a.t.Errorf("Expected %s to be a bool, but got type %T", a.name, a.actual)
+		logFail(a.name, "IsFalse — not a bool")
 		return a
 	}
 	if b {
 		a.t.Helper()
 		a.t.Errorf("Expected %s to be false, but got true", a.name)
+		logFail(a.name, "IsFalse")
+	} else {
+		logPass(a.name, "IsFalse")
 	}
 	return a
 }
@@ -138,11 +156,15 @@ func (a *Assertion) Contains(substring string) *Assertion {
 	if !ok {
 		a.t.Helper()
 		a.t.Errorf("Expected %s to be a string, but got type %T", a.name, a.actual)
+		logFail(a.name, "Contains — not a string")
 		return a
 	}
 	if !strings.Contains(str, substring) {
 		a.t.Helper()
 		a.t.Errorf("Expected %s to contain:\n  %q\nbut got:\n  %q", a.name, substring, str)
+		logFail(a.name, fmt.Sprintf("Contains(%q)", substring))
+	} else {
+		logPass(a.name, fmt.Sprintf("Contains(%q)", substring))
 	}
 	return a
 }
@@ -155,11 +177,15 @@ func (a *Assertion) NotContains(substring string) *Assertion {
 	if !ok {
 		a.t.Helper()
 		a.t.Errorf("Expected %s to be a string, but got type %T", a.name, a.actual)
+		logFail(a.name, "NotContains — not a string")
 		return a
 	}
 	if strings.Contains(str, substring) {
 		a.t.Helper()
 		a.t.Errorf("Expected %s to not contain:\n  %q\nbut it does:\n  %q", a.name, substring, str)
+		logFail(a.name, fmt.Sprintf("NotContains(%q)", substring))
+	} else {
+		logPass(a.name, fmt.Sprintf("NotContains(%q)", substring))
 	}
 	return a
 }
@@ -177,6 +203,9 @@ func (a *Assertion) StartsWith(prefix string) *Assertion {
 	if !strings.HasPrefix(str, prefix) {
 		a.t.Helper()
 		a.t.Errorf("Expected %s to start with:\n  %q\nbut got:\n  %q", a.name, prefix, str)
+		logFail(a.name, fmt.Sprintf("StartsWith(%q)", prefix))
+	} else {
+		logPass(a.name, fmt.Sprintf("StartsWith(%q)", prefix))
 	}
 	return a
 }
@@ -194,6 +223,9 @@ func (a *Assertion) EndsWith(suffix string) *Assertion {
 	if !strings.HasSuffix(str, suffix) {
 		a.t.Helper()
 		a.t.Errorf("Expected %s to end with:\n  %q\nbut got:\n  %q", a.name, suffix, str)
+		logFail(a.name, fmt.Sprintf("EndsWith(%q)", suffix))
+	} else {
+		logPass(a.name, fmt.Sprintf("EndsWith(%q)", suffix))
 	}
 	return a
 }
@@ -212,6 +244,9 @@ func (a *Assertion) IsEmpty() *Assertion {
 		if val.Len() != 0 {
 			a.t.Helper()
 			a.t.Errorf("Expected %s to be empty, but has length %d", a.name, val.Len())
+			logFail(a.name, "IsEmpty")
+		} else {
+			logPass(a.name, "IsEmpty")
 		}
 	default:
 		a.t.Helper()
@@ -236,6 +271,9 @@ func (a *Assertion) IsNotEmpty() *Assertion {
 		if val.Len() == 0 {
 			a.t.Helper()
 			a.t.Errorf("Expected %s to not be empty", a.name)
+			logFail(a.name, "IsNotEmpty")
+		} else {
+			logPass(a.name, "IsNotEmpty")
 		}
 	default:
 		a.t.Helper()
@@ -261,6 +299,9 @@ func (a *Assertion) HasLength(expected int) *Assertion {
 		if actualLen != expected {
 			a.t.Helper()
 			a.t.Errorf("Expected %s to have length %d, but got %d", a.name, expected, actualLen)
+			logFail(a.name, fmt.Sprintf("HasLength(%d) — got %d", expected, actualLen))
+		} else {
+			logPass(a.name, fmt.Sprintf("HasLength(%d)", expected))
 		}
 	default:
 		a.t.Helper()
@@ -292,6 +333,9 @@ func (a *Assertion) IsGreaterThan(expected interface{}) *Assertion {
 	if actualFloat <= expectedFloat {
 		a.t.Helper()
 		a.t.Errorf("Expected %s to be greater than %v, but got %v", a.name, expected, a.actual)
+		logFail(a.name, fmt.Sprintf("IsGreaterThan(%v)", expected))
+	} else {
+		logPass(a.name, fmt.Sprintf("IsGreaterThan(%v)", expected))
 	}
 	return a
 }
@@ -319,6 +363,9 @@ func (a *Assertion) IsLessThan(expected interface{}) *Assertion {
 	if actualFloat >= expectedFloat {
 		a.t.Helper()
 		a.t.Errorf("Expected %s to be less than %v, but got %v", a.name, expected, a.actual)
+		logFail(a.name, fmt.Sprintf("IsLessThan(%v)", expected))
+	} else {
+		logPass(a.name, fmt.Sprintf("IsLessThan(%v)", expected))
 	}
 	return a
 }
@@ -346,6 +393,9 @@ func (a *Assertion) IsGreaterThanOrEqual(expected interface{}) *Assertion {
 	if actualFloat < expectedFloat {
 		a.t.Helper()
 		a.t.Errorf("Expected %s to be >= %v, but got %v", a.name, expected, a.actual)
+		logFail(a.name, fmt.Sprintf("IsGreaterThanOrEqual(%v)", expected))
+	} else {
+		logPass(a.name, fmt.Sprintf("IsGreaterThanOrEqual(%v)", expected))
 	}
 	return a
 }
@@ -373,6 +423,9 @@ func (a *Assertion) IsLessThanOrEqual(expected interface{}) *Assertion {
 	if actualFloat > expectedFloat {
 		a.t.Helper()
 		a.t.Errorf("Expected %s to be <= %v, but got %v", a.name, expected, a.actual)
+		logFail(a.name, fmt.Sprintf("IsLessThanOrEqual(%v)", expected))
+	} else {
+		logPass(a.name, fmt.Sprintf("IsLessThanOrEqual(%v)", expected))
 	}
 	return a
 }
@@ -385,6 +438,9 @@ func (a *Assertion) HasType(expected interface{}) *Assertion {
 	if actualType != expectedType {
 		a.t.Helper()
 		a.t.Errorf("Expected %s to have type %v, but got %v", a.name, expectedType, actualType)
+		logFail(a.name, fmt.Sprintf("HasType(%v)", expectedType))
+	} else {
+		logPass(a.name, fmt.Sprintf("HasType(%v)", expectedType))
 	}
 	return a
 }
@@ -403,63 +459,5 @@ func toFloat64(value interface{}) (float64, bool) {
 		return val.Float(), true
 	default:
 		return 0, false
-	}
-}
-
-// ErrorAssertion provides assertions for errors.
-type ErrorAssertion struct {
-	t   TestingT
-	err error
-}
-
-// ThatError creates a new error assertion.
-func ThatError(t TestingT, err error) *ErrorAssertion {
-	return &ErrorAssertion{
-		t:   t,
-		err: err,
-	}
-}
-
-// IsNil asserts that the error is nil.
-func (e *ErrorAssertion) IsNil() *ErrorAssertion {
-	if e.err != nil {
-		e.t.Helper()
-		e.t.Errorf("Expected no error, but got:\n  %v", e.err)
-	}
-	return e
-}
-
-// IsNotNil asserts that the error is not nil.
-func (e *ErrorAssertion) IsNotNil() *ErrorAssertion {
-	if e.err == nil {
-		e.t.Helper()
-		e.t.Error("Expected an error, but got nil")
-	}
-	return e
-}
-
-// HasMessage asserts that the error message contains the expected text.
-func (e *ErrorAssertion) HasMessage(expected string) *ErrorAssertion {
-	if e.err == nil {
-		e.t.Helper()
-		e.t.Error("Expected an error with message, but got nil")
-		return e
-	}
-
-	var msg string = e.err.Error()
-	if !strings.Contains(msg, expected) {
-		e.t.Helper()
-		e.t.Errorf("Expected error message to contain:\n  %q\nbut got:\n  %q", expected, msg)
-	}
-	return e
-}
-
-// Fail explicitly fails the test with a message.
-func Fail(t TestingT, message string, args ...interface{}) {
-	t.Helper()
-	if len(args) > 0 {
-		t.Errorf(message, args...)
-	} else {
-		t.Error(message)
 	}
 }

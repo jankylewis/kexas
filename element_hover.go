@@ -31,7 +31,7 @@ func (e *Element) Hover() error {
 	var err error
 	objectID, err = e.resolveObjectID()
 	if err != nil {
-		return fmt.Errorf("failed to resolve element: %w", err)
+		return errors.ResolveElementFailed(err)
 	}
 
 	return e.dispatchHoverEvent(objectID)
@@ -58,14 +58,14 @@ func (e *Element) WaitAndHover() error {
 	var _, err error
 	_, err = e.page.WaitForElementVisible(e.selector, e.timeout)
 	if err != nil {
-		return fmt.Errorf("element not visible: %w", err)
+		return errors.ElementNotVisibleWrap(err)
 	}
 
 	// Resolve nodeId to objectId
 	var objectID string
 	objectID, err = e.resolveObjectID()
 	if err != nil {
-		return fmt.Errorf("failed to resolve element: %w", err)
+		return errors.ResolveElementFailed(err)
 	}
 
 	return e.dispatchHoverEvent(objectID)
@@ -97,14 +97,14 @@ func (e *Element) WaitAndHoverFor(timeout time.Duration) error {
 	var _, err error
 	_, err = e.page.WaitForElementVisible(e.selector, timeout)
 	if err != nil {
-		return fmt.Errorf("element not visible within %v: %w", timeout, err)
+		return errors.ElementNotVisibleWithinWrap(timeout, err)
 	}
 
 	// Resolve nodeId to objectId
 	var objectID string
 	objectID, err = e.resolveObjectID()
 	if err != nil {
-		return fmt.Errorf("failed to resolve element: %w", err)
+		return errors.ResolveElementFailed(err)
 	}
 
 	return e.dispatchHoverEvent(objectID)

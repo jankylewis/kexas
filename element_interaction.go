@@ -31,7 +31,7 @@ func (e *Element) Click() error {
 	var err error
 	objectID, err = e.resolveObjectID()
 	if err != nil {
-		return fmt.Errorf("failed to resolve element: %w", err)
+		return errors.ResolveElementFailed(err)
 	}
 
 	// Use CDP Runtime.callFunctionOn to click the element immediately
@@ -51,7 +51,7 @@ func (e *Element) Click() error {
 	var result map[string]interface{}
 	result, err = e.page.sendCommand(cdp.CmdRuntimeCallFunctionOn, params)
 	if err != nil {
-		return fmt.Errorf("failed to click element: %w", err)
+		return errors.ClickElementFailed(err)
 	}
 
 	// Check if the click was successful
@@ -94,7 +94,7 @@ func (e *Element) WaitAndClick() error {
 	var objectID string
 	objectID, err = e.resolveObjectID()
 	if err != nil {
-		return fmt.Errorf("failed to resolve element: %w", err)
+		return errors.ResolveElementFailed(err)
 	}
 
 	// Use CDP Runtime.callFunctionOn to click the element
@@ -114,7 +114,7 @@ func (e *Element) WaitAndClick() error {
 	var result map[string]interface{}
 	result, err = e.page.sendCommand(cdp.CmdRuntimeCallFunctionOn, params)
 	if err != nil {
-		return fmt.Errorf("failed to click element: %w", err)
+		return errors.ClickElementFailed(err)
 	}
 
 	// Check if the click was successful
@@ -161,7 +161,7 @@ func (e *Element) WaitAndClickFor(timeout time.Duration) error {
 	var objectID string
 	objectID, err = e.resolveObjectID()
 	if err != nil {
-		return fmt.Errorf("failed to resolve element: %w", err)
+		return errors.ResolveElementFailed(err)
 	}
 
 	// Use CDP Runtime.callFunctionOn to click the element
@@ -181,7 +181,7 @@ func (e *Element) WaitAndClickFor(timeout time.Duration) error {
 	var result map[string]interface{}
 	result, err = e.page.sendCommand(cdp.CmdRuntimeCallFunctionOn, params)
 	if err != nil {
-		return fmt.Errorf("failed to click element: %w", err)
+		return errors.ClickElementFailed(err)
 	}
 
 	// Check if the click was successful
@@ -225,7 +225,7 @@ func (e *Element) Type(text string) error {
 	var err error
 	objectID, err = e.resolveObjectID()
 	if err != nil {
-		return fmt.Errorf("failed to resolve element: %w", err)
+		return errors.ResolveElementFailed(err)
 	}
 
 	// Focus and clear the element via JS
@@ -242,7 +242,7 @@ func (e *Element) Type(text string) error {
 		"returnByValue":       true,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to focus element: %w", err)
+		return errors.FocusElementFailed(err)
 	}
 
 	// Type each character using CDP Input.dispatchKeyEvent (Playwright pattern)
@@ -253,7 +253,7 @@ func (e *Element) Type(text string) error {
 		var charStr string = string(ch)
 
 		// keyDown (no "text" — only identifies which key was pressed)
-		_, err = e.page.sendCommand("Input.dispatchKeyEvent", map[string]interface{}{
+		_, err = e.page.sendCommand(cdp.CmdInputDispatchKeyEvent, map[string]interface{}{
 			"type": "keyDown",
 			"key":  charStr,
 		})
@@ -262,7 +262,7 @@ func (e *Element) Type(text string) error {
 		}
 
 		// char (carries "text" — this is what actually inserts the character)
-		_, err = e.page.sendCommand("Input.dispatchKeyEvent", map[string]interface{}{
+		_, err = e.page.sendCommand(cdp.CmdInputDispatchKeyEvent, map[string]interface{}{
 			"type":           "char",
 			"text":           charStr,
 			"unmodifiedText": charStr,
@@ -273,7 +273,7 @@ func (e *Element) Type(text string) error {
 		}
 
 		// keyUp (no "text" — only signals key release)
-		_, err = e.page.sendCommand("Input.dispatchKeyEvent", map[string]interface{}{
+		_, err = e.page.sendCommand(cdp.CmdInputDispatchKeyEvent, map[string]interface{}{
 			"type": "keyUp",
 			"key":  charStr,
 		})
@@ -312,7 +312,7 @@ func (e *Element) WaitAndType(text string) error {
 	var _, err error
 	_, err = e.page.WaitForElementVisible(e.selector, e.timeout)
 	if err != nil {
-		return fmt.Errorf("element not visible: %w", err)
+		return errors.ElementNotVisibleWrap(err)
 	}
 
 	return e.Type(text)
@@ -349,7 +349,7 @@ func (e *Element) WaitAndTypeFor(text string, timeout time.Duration) error {
 	var _, err error
 	_, err = e.page.WaitForElementVisible(e.selector, timeout)
 	if err != nil {
-		return fmt.Errorf("element not visible within %v: %w", timeout, err)
+		return errors.ElementNotVisibleWithinWrap(timeout, err)
 	}
 
 	return e.Type(text)

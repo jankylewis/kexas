@@ -20,6 +20,7 @@ type Page struct {
 	log          *logger.Logger
 	ctx          context.Context
 	agentManager *agent.AgentManager
+	closed       bool
 }
 
 // Navigate navigates the page to the given URL.
@@ -159,13 +160,18 @@ func (p *Page) ensureAgentsForCommand(method string) error {
 	switch method {
 	case cdp.CmdDOMPerformSearch, cdp.CmdDOMGetSearchResults, cdp.CmdDOMQuerySelector,
 		cdp.CmdDOMGetComputedStyle, cdp.CmdDOMGetBoxModel, cdp.CmdDOMGetAttributes,
-		cdp.CmdDOMGetOuterHTML, cdp.CmdDOMDescribeNode, "DOM.requestNode", "DOM.getDocument", "DOM.resolveNode":
+		cdp.CmdDOMGetOuterHTML, cdp.CmdDOMDescribeNode, "DOM.requestNode", "DOM.getDocument", cdp.CmdDOMResolveNode:
 		return p.agentManager.EnsureAgent(agent.AgentDOM)
 	case cdp.CmdRuntimeEvaluate, cdp.CmdRuntimeCallFunctionOn:
 		return p.agentManager.EnsureAgent(agent.AgentRuntime)
-	case cdp.CmdPageNavigate, cdp.CmdPageCaptureScreenshot:
+	case cdp.CmdPageNavigate, cdp.CmdPageCaptureScreenshot,
+		cdp.CmdPageStartScreencast, cdp.CmdPageStopScreencast,
+		cdp.CmdPageScreencastFrameAck, cdp.CmdPageBringToFront:
 		return p.agentManager.EnsureAgent(agent.AgentPage)
-	case "Input.dispatchKeyEvent", "Input.dispatchMouseEvent", "Input.dispatchTouchEvent":
+	case cdp.CmdNetworkGetCookies, cdp.CmdNetworkSetCookie,
+		cdp.CmdNetworkDeleteCookies, cdp.CmdNetworkClearBrowserCookies:
+		return p.agentManager.EnsureAgent(agent.AgentNetwork)
+	case cdp.CmdInputDispatchKeyEvent, "Input.dispatchMouseEvent", "Input.dispatchTouchEvent":
 		// Input domain is auto-enabled, no agent needed
 		return nil
 	default:
@@ -184,7 +190,7 @@ func (p *Page) WaitForLoad(timeout time.Duration) error {
 	for time.Since(start) < timeout {
 		var result map[string]interface{}
 		var err error
-		result, err = p.sendCommand("Runtime.evaluate", map[string]interface{}{
+		result, err = p.sendCommand(cdp.CmdRuntimeEvaluate, map[string]interface{}{
 			"expression": "document.readyState",
 		})
 		if err != nil {
@@ -207,6 +213,10 @@ func (p *Page) WaitForLoad(timeout time.Duration) error {
 
 // Close closes the page and cleans up resources.
 func (p *Page) Close() error {
+	if p.closed {
+		return nil
+	}
+
 	p.log.Debug("closing page")
 
 	var err error
@@ -216,7 +226,32 @@ func (p *Page) Close() error {
 		return fmt.Errorf("failed to close page: %w", err)
 	}
 
+	p.closed = true
+
+	// Remove from browser's tracked pages
+	if p.browser != nil {
+		p.browser.removePage(p)
+	}
+
 	p.log.Info("page closed")
+	return nil
+}
+
+// IsClosed returns whether this page has been closed.
+func (p *Page) IsClosed() bool {
+	return p.closed
+}
+
+// BringToFront activates this tab (brings it to the foreground).
+func (p *Page) BringToFront() error {
+	p.log.Debug("bringing page to front")
+
+	var err error
+	_, err = p.sendCommand(cdp.CmdPageBringToFront, nil)
+	if err != nil {
+		return fmt.Errorf("bring to front failed: %w", err)
+	}
+
 	return nil
 }
 
@@ -302,7 +337,7 @@ func (p *Page) SetContent(html string) error {
 	// Get the frame ID from the page's target
 	var frameResult map[string]interface{}
 	var err error
-	frameResult, err = p.sendCommand("Page.getFrameTree", nil)
+	frameResult, err = p.sendCommand(cdp.CmdPageGetFrameTree, nil)
 	if err != nil {
 		return fmt.Errorf("failed to get frame tree: %w", err)
 	}

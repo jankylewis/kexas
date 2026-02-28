@@ -67,6 +67,8 @@ var (
 	ErrTypeOperationFailed     = fmt.Errorf("type operation failed")
 	ErrFailedToHoverElement    = fmt.Errorf("failed to hover element")
 	ErrHoverOperationFailed    = fmt.Errorf("hover operation failed")
+	ErrScrollOperationFailed   = fmt.Errorf("scroll operation failed")
+	ErrScrollInvalidPixels     = fmt.Errorf("scroll pixels must not be zero")
 
 	// Common timeout validation error
 	ErrTimeoutInvalid = fmt.Errorf("timeout must be at least 1 second")
@@ -78,6 +80,32 @@ var (
 	ErrAgentNotFound        = fmt.Errorf("agent not found")
 	ErrAgentContextNotFound = fmt.Errorf("agent context not found")
 	ErrAgentNotReady        = fmt.Errorf("agent not ready")
+
+	// Cookie management errors
+	ErrCookieNameEmpty    = fmt.Errorf("cookie name cannot be empty")
+	ErrCookieValueEmpty   = fmt.Errorf("cookie value cannot be empty")
+	ErrCookieSetFailed    = fmt.Errorf("failed to set cookie")
+	ErrCookieGetFailed    = fmt.Errorf("failed to get cookies")
+	ErrCookieDeleteFailed = fmt.Errorf("failed to delete cookie")
+	ErrCookieNotFound     = fmt.Errorf("cookie not found")
+
+	// Storage errors
+	ErrStorageKeyEmpty     = fmt.Errorf("storage key cannot be empty")
+	ErrStorageSetFailed    = fmt.Errorf("failed to set storage item")
+	ErrStorageGetFailed    = fmt.Errorf("failed to get storage item")
+	ErrStorageRemoveFailed = fmt.Errorf("failed to remove storage item")
+	ErrStorageClearFailed  = fmt.Errorf("failed to clear storage")
+
+	// Multi-tab errors
+	ErrPageAlreadyClosed     = fmt.Errorf("page is already closed")
+	ErrPageIndexOutOfRange   = fmt.Errorf("page index out of range")
+	ErrNoPageMatchingURL     = fmt.Errorf("no page matching URL pattern")
+	ErrWaitForNewPageTimeout = fmt.Errorf("timed out waiting for new page")
+
+	// Recorder errors
+	ErrRecorderNotStarted     = fmt.Errorf("recorder not started")
+	ErrRecorderAlreadyStarted = fmt.Errorf("recorder already started")
+	ErrFfmpegNotFound         = fmt.Errorf("ffmpeg not found")
 )
 
 // ElementError represents an error related to element operations
@@ -225,4 +253,34 @@ func AgentContextNotFound(agentName string) error {
 // AgentNotReady creates a formatted "agent not ready" error
 func AgentNotReady(agentName string, cause error) error {
 	return fmt.Errorf("agent %s not ready: %w", agentName, cause)
+}
+
+// ResolveElementFailed creates a formatted "failed to resolve element" error
+func ResolveElementFailed(cause error) error {
+	return fmt.Errorf("failed to resolve element: %w", cause)
+}
+
+// ClickElementFailed creates a formatted "failed to click element" error
+func ClickElementFailed(cause error) error {
+	return fmt.Errorf("failed to click element: %w", cause)
+}
+
+// HoverElementFailed creates a formatted "failed to hover over element" error
+func HoverElementFailed(cause error) error {
+	return fmt.Errorf("failed to hover over element: %w", cause)
+}
+
+// ElementNotVisibleWrap creates a wrapping "element not visible" error
+func ElementNotVisibleWrap(cause error) error {
+	return fmt.Errorf("element not visible: %w", cause)
+}
+
+// ElementNotVisibleWithinWrap creates a wrapping "element not visible within timeout" error
+func ElementNotVisibleWithinWrap(timeout interface{}, cause error) error {
+	return fmt.Errorf("element not visible within %v: %w", timeout, cause)
+}
+
+// FocusElementFailed creates a formatted "failed to focus element" error
+func FocusElementFailed(cause error) error {
+	return fmt.Errorf("failed to focus element: %w", cause)
 }

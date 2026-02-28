@@ -4,7 +4,11 @@ package kexas
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
+	"time"
 
+	"github.com/kexas-project/kexas/errors"
 	"github.com/kexas-project/kexas/internal/agent"
 	"github.com/kexas-project/kexas/internal/cdp"
 	"github.com/kexas-project/kexas/internal/logger"
@@ -17,6 +21,8 @@ type Browser struct {
 	client  *cdp.Client
 	log     *logger.Logger
 	ctx     context.Context
+	pages   []*Page
+	pagesMu sync.Mutex
 }
 
 // Launch starts a new browser instance and connects via CDP.
@@ -87,7 +93,18 @@ func (b *Browser) NewPage() (*Page, error) {
 
 	b.log.Debug("page created", "targetId", targetID)
 
-	return b.attachToPage(targetID)
+	var page *Page
+	var attachErr error
+	page, attachErr = b.attachToPage(targetID)
+	if attachErr != nil {
+		return nil, attachErr
+	}
+
+	b.pagesMu.Lock()
+	b.pages = append(b.pages, page)
+	b.pagesMu.Unlock()
+
+	return page, nil
 }
 
 // FirstPage gets the first existing page (the default tab).
@@ -132,7 +149,19 @@ func (b *Browser) FirstPage() (*Page, error) {
 		}
 
 		b.log.Debug("found first page", "targetId", targetID)
-		return b.attachToPage(targetID)
+
+		var page *Page
+		var attachErr error
+		page, attachErr = b.attachToPage(targetID)
+		if attachErr != nil {
+			return nil, attachErr
+		}
+
+		b.pagesMu.Lock()
+		b.pages = append(b.pages, page)
+		b.pagesMu.Unlock()
+
+		return page, nil
 	}
 
 	return nil, fmt.Errorf("kexas: no page targets found")
@@ -241,6 +270,185 @@ func (b *Browser) attachToPage(targetID string) (*Page, error) {
 	}
 
 	return page, nil
+}
+
+// Pages returns all currently tracked pages.
+func (b *Browser) Pages() []*Page {
+	b.pagesMu.Lock()
+	defer b.pagesMu.Unlock()
+
+	var result []*Page = make([]*Page, len(b.pages))
+	copy(result, b.pages)
+	return result
+}
+
+// PageCount returns the number of currently tracked pages.
+func (b *Browser) PageCount() int {
+	b.pagesMu.Lock()
+	defer b.pagesMu.Unlock()
+	return len(b.pages)
+}
+
+// PageByIndex returns a page by its index in the tracked pages list.
+func (b *Browser) PageByIndex(index int) (*Page, error) {
+	b.pagesMu.Lock()
+	defer b.pagesMu.Unlock()
+
+	if index < 0 || index >= len(b.pages) {
+		return nil, fmt.Errorf("page index %d: %w", index, errors.ErrPageIndexOutOfRange)
+	}
+
+	return b.pages[index], nil
+}
+
+// PageByURL finds a page whose URL contains the given pattern (substring match).
+func (b *Browser) PageByURL(urlPattern string) (*Page, error) {
+	b.pagesMu.Lock()
+	var pageCopy []*Page = make([]*Page, len(b.pages))
+	copy(pageCopy, b.pages)
+	b.pagesMu.Unlock()
+
+	for i := 0; i < len(pageCopy); i++ {
+		var pageURL string
+		var err error
+		pageURL, err = pageCopy[i].URL()
+		if err != nil {
+			continue
+		}
+		if strings.Contains(pageURL, urlPattern) {
+			return pageCopy[i], nil
+		}
+	}
+
+	return nil, fmt.Errorf("url pattern '%s': %w", urlPattern, errors.ErrNoPageMatchingURL)
+}
+
+// WaitForNewPage executes the given action and waits for a new page (tab) to appear.
+// The action typically triggers a new tab (e.g., clicking a link with target="_blank").
+// Returns the new page, or an error if no new page appears within the timeout.
+func (b *Browser) WaitForNewPage(action func(), timeout time.Duration) (*Page, error) {
+	b.log.Debug("waiting for new page", "timeout", timeout)
+
+	// Record current page count
+	b.pagesMu.Lock()
+	var beforeCount int = len(b.pages)
+	b.pagesMu.Unlock()
+
+	// Execute the action that should open a new tab
+	action()
+
+	// Poll for new targets
+	var start time.Time = time.Now()
+	var pollInterval time.Duration = 100 * time.Millisecond
+
+	for time.Since(start) < timeout {
+		time.Sleep(pollInterval)
+
+		// Check for new targets via CDP
+		var result map[string]interface{}
+		var err error
+		result, err = b.client.Send(b.ctx, cdp.CmdTargetGetTargets, map[string]interface{}{})
+		if err != nil {
+			continue
+		}
+
+		var targetInfos []interface{}
+		var ok bool
+		targetInfos, ok = result["targetInfos"].([]interface{})
+		if !ok {
+			continue
+		}
+
+		// Count page targets
+		var pageTargets []string
+		for _, targetInfoRaw := range targetInfos {
+			var targetInfo map[string]interface{}
+			targetInfo, ok = targetInfoRaw.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			var targetType string
+			targetType, ok = targetInfo["type"].(string)
+			if !ok || targetType != "page" {
+				continue
+			}
+			var tid string
+			tid, _ = targetInfo["targetId"].(string)
+			pageTargets = append(pageTargets, tid)
+		}
+
+		if len(pageTargets) > beforeCount {
+			// Find the new target that we haven't attached to
+			b.pagesMu.Lock()
+			var knownTargets map[string]bool = make(map[string]bool)
+			for _, p := range b.pages {
+				knownTargets[p.targetID] = true
+			}
+			b.pagesMu.Unlock()
+
+			for _, tid := range pageTargets {
+				if !knownTargets[tid] {
+					var page *Page
+					page, err = b.attachToPage(tid)
+					if err != nil {
+						return nil, fmt.Errorf("failed to attach to new page: %w", err)
+					}
+
+					b.pagesMu.Lock()
+					b.pages = append(b.pages, page)
+					b.pagesMu.Unlock()
+
+					b.log.Info("new page detected", "targetId", tid)
+					return page, nil
+				}
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("after %v: %w", timeout, errors.ErrWaitForNewPageTimeout)
+}
+
+// CloseAllPagesExcept closes all tracked pages except the specified one.
+func (b *Browser) CloseAllPagesExcept(keep *Page) error {
+	b.pagesMu.Lock()
+	var pagesToClose []*Page = make([]*Page, 0)
+	for _, p := range b.pages {
+		if p != keep {
+			pagesToClose = append(pagesToClose, p)
+		}
+	}
+	b.pagesMu.Unlock()
+
+	for _, p := range pagesToClose {
+		var err error = p.Close()
+		if err != nil {
+			b.log.Error("failed to close page", "targetId", p.targetID, "error", err)
+		}
+	}
+
+	// Update the pages list to only keep the one page
+	b.pagesMu.Lock()
+	if keep != nil {
+		b.pages = []*Page{keep}
+	} else {
+		b.pages = nil
+	}
+	b.pagesMu.Unlock()
+
+	return nil
+}
+
+// removePage removes a page from the tracked pages list.
+func (b *Browser) removePage(page *Page) {
+	b.pagesMu.Lock()
+	defer b.pagesMu.Unlock()
+
+	for i := 0; i < len(b.pages); i++ {
+		if b.pages[i] == page {
+			b.pages = append(b.pages[:i], b.pages[i+1:]...)
+			return
+		}
+	}
 }
 
 // Close closes the browser and cleans up resources.

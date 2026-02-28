@@ -126,7 +126,7 @@ func (e *Element) resolveObjectID() (string, error) {
 
 	var result map[string]interface{}
 	var err error
-	result, err = e.page.sendCommand("DOM.resolveNode", map[string]interface{}{
+	result, err = e.page.sendCommand(cdp.CmdDOMResolveNode, map[string]interface{}{
 		"nodeId": e.nodeID,
 	})
 	if err != nil {

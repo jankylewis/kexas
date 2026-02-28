@@ -40,7 +40,6 @@ package ktest
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"reflect"
 	"testing"
@@ -80,12 +79,16 @@ type Config struct {
 	Timeout           time.Duration
 	Retries           int
 	Parallel          bool
+	ParallelSet       int
 	ScreenshotOnFail  bool
 	ScreenshotDir     string
 	VideoDir          string
+	ReportDir         string
 	SlowMo            time.Duration
 	BaseURL           string
 	BrowserExecutable string
+	ViewportWidth     int
+	ViewportHeight    int
 }
 
 // DefaultConfig returns sensible default configuration.
@@ -95,11 +98,15 @@ func DefaultConfig() *Config {
 		Timeout:          20 * time.Second, // Changed from 30s to 20s
 		Retries:          0,
 		Parallel:         false,
+		ParallelSet:      1,
 		ScreenshotOnFail: true,
 		ScreenshotDir:    "./test-results/screenshots",
 		VideoDir:         "./test-results/videos",
+		ReportDir:        "./test-results",
 		SlowMo:           0,
 		BaseURL:          "",
+		ViewportWidth:    1280,
+		ViewportHeight:   720,
 	}
 }
 
@@ -109,23 +116,33 @@ type configJSON struct {
 	Timeout           *int    `json:"timeout"`
 	Retries           *int    `json:"retries"`
 	Parallel          *bool   `json:"parallel"`
+	ParallelSet       *int    `json:"parallelSet"`
 	ScreenshotOnFail  *bool   `json:"screenshotOnFail"`
 	ScreenshotDir     *string `json:"screenshotDir"`
 	VideoDir          *string `json:"videoDir"`
+	ReportDir         *string `json:"reportDir"`
 	SlowMo            *int    `json:"slowMo"`
 	BaseURL           *string `json:"baseURL"`
 	BrowserExecutable *string `json:"browserExecutable"`
+	ViewportWidth     *int    `json:"viewportWidth"`
+	ViewportHeight    *int    `json:"viewportHeight"`
 }
 
 // loadConfig loads configuration from kexas.config.json if it exists.
 // Falls back to DefaultConfig() if file not found or invalid.
 func loadConfig() *Config {
+	return LoadConfigFromFile("./kexas.config.json")
+}
+
+// LoadConfigFromFile loads configuration from a specific file path.
+// Primarily used by loadConfig and unit tests.
+func LoadConfigFromFile(path string) *Config {
 	var config *Config = DefaultConfig()
 
 	// Try to read config file
 	var data []byte
 	var err error
-	data, err = os.ReadFile("./kexas.config.json")
+	data, err = os.ReadFile(path)
 	if err != nil {
 		// File not found or can't read - use defaults
 		return config
@@ -152,6 +169,12 @@ func loadConfig() *Config {
 	if jsonConfig.Parallel != nil {
 		config.Parallel = *jsonConfig.Parallel
 	}
+	if jsonConfig.ParallelSet != nil && *jsonConfig.ParallelSet >= 1 {
+		config.ParallelSet = *jsonConfig.ParallelSet
+		if config.ParallelSet > 1 {
+			config.Parallel = true
+		}
+	}
 	if jsonConfig.ScreenshotOnFail != nil {
 		config.ScreenshotOnFail = *jsonConfig.ScreenshotOnFail
 	}
@@ -161,6 +184,9 @@ func loadConfig() *Config {
 	if jsonConfig.VideoDir != nil {
 		config.VideoDir = *jsonConfig.VideoDir
 	}
+	if jsonConfig.ReportDir != nil {
+		config.ReportDir = *jsonConfig.ReportDir
+	}
 	if jsonConfig.SlowMo != nil {
 		config.SlowMo = time.Duration(*jsonConfig.SlowMo) * time.Millisecond
 	}
@@ -169,6 +195,12 @@ func loadConfig() *Config {
 	}
 	if jsonConfig.BrowserExecutable != nil {
 		config.BrowserExecutable = *jsonConfig.BrowserExecutable
+	}
+	if jsonConfig.ViewportWidth != nil && *jsonConfig.ViewportWidth > 0 {
+		config.ViewportWidth = *jsonConfig.ViewportWidth
+	}
+	if jsonConfig.ViewportHeight != nil && *jsonConfig.ViewportHeight > 0 {
+		config.ViewportHeight = *jsonConfig.ViewportHeight
 	}
 
 	return config
@@ -374,115 +406,4 @@ func runTestLifecycle(t KTestT, suiteValue reflect.Value, suiteType reflect.Type
 	callHook(suiteValue, "AfterAll")
 }
 
-// AutoRun automatically discovers and runs Test* functions in the current package
-// This provides the Playwright-style experience with zero boilerplate
-func AutoRun() {
-	fmt.Println("🧪 Kexas Auto-Discovery Test Runner")
-	fmt.Println("=====================================")
-
-	// First, try to run registered tests from AlphaInit/Group system
-	var registeredTests []NamedTest = GetRegisteredTests()
-	if len(registeredTests) > 0 {
-		fmt.Printf("🔍 Found %d registered tests from AlphaInit:\n", len(registeredTests))
-		for _, test := range registeredTests {
-			fmt.Printf("  - %s\n", test.Name)
-		}
-		runRegisteredTests(registeredTests)
-		return
-	}
-
-	// Fall back to traditional Test* function discovery
-	var tests []reflect.Value
-	var err error
-	tests, err = discoverTestFunctions()
-	if err != nil {
-		fmt.Printf("❌ Failed to discover tests: %v\n", err)
-		os.Exit(1)
-	}
-
-	if len(tests) == 0 {
-		fmt.Println("ℹ️  No Test* functions found. Create functions starting with 'Test'.")
-		return
-	}
-
-	fmt.Printf("🔍 Discovered %d test functions:\n", len(tests))
-	for _, test := range tests {
-		fmt.Printf("  - %s\n", test.Type().Name())
-	}
-
-	// Create test runner
-	var t *ktestT = newKTestT()
-
-	// Launch browser
-	t.Log("ktest: launching browser")
-	var browser *kexas.Browser
-	browser, err = kexas.Launch(launcher.DefaultOptions())
-	if err != nil {
-		t.Fatalf("ktest: failed to launch browser: %v", err)
-	}
-	defer browser.Close()
-
-	// Run global BeforeAll if it exists
-	var beforeAllFunc reflect.Value = findGlobalHook("BeforeAll")
-	if beforeAllFunc.IsValid() {
-		t.Log("ktest: running global BeforeAll")
-		beforeAllFunc.Call(nil)
-	}
-
-	// Run each test function
-	for _, testFunc := range tests {
-		var testName string = testFunc.Type().Name()
-		t.Run(testName, func(t KTestT) {
-			t.Logf("ktest: running %s", testName)
-
-			// Create new page for each test (like Playwright)
-			var page *kexas.Page
-			page, err = browser.NewPage()
-			if err != nil {
-				t.Errorf("ktest: failed to create page: %v", err)
-				return
-			}
-			defer page.Close()
-
-			// Run global BeforeEach if it exists
-			var beforeEachFunc reflect.Value = findGlobalHook("BeforeEach")
-			if beforeEachFunc.IsValid() {
-				t.Log("ktest: running global BeforeEach")
-				beforeEachFunc.Call([]reflect.Value{reflect.ValueOf(page)})
-			}
-
-			// Recover from panics
-			defer func() {
-				if r := recover(); r != nil {
-					t.Errorf("ktest: test %s panicked: %v", testName, r)
-				}
-
-				// Run global AfterEach if it exists
-				var afterEachFunc reflect.Value = findGlobalHook("AfterEach")
-				if afterEachFunc.IsValid() {
-					t.Log("ktest: running global AfterEach")
-					afterEachFunc.Call([]reflect.Value{reflect.ValueOf(page)})
-				}
-			}()
-
-			// Call the test function with page parameter
-			testFunc.Call([]reflect.Value{reflect.ValueOf(page)})
-
-			t.Logf("ktest: %s completed", testName)
-		})
-	}
-
-	// Run global AfterAll if it exists
-	var afterAllFunc reflect.Value = findGlobalHook("AfterAll")
-	if afterAllFunc.IsValid() {
-		t.Log("ktest: running global AfterAll")
-		afterAllFunc.Call(nil)
-	}
-
-	// Exit with proper code
-	if t.failed {
-		os.Exit(1)
-	}
-
-	fmt.Println("🎉 All tests completed!")
-}
+// AutoRun is defined in ktest_autorun.go

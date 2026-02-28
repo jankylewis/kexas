@@ -89,7 +89,7 @@ func (e *Element) GetText() (string, error) {
 	var err error
 	objectID, err = e.resolveObjectID()
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve element: %w", err)
+		return "", errors.ResolveElementFailed(err)
 	}
 
 	// Use Runtime.callFunctionOn to get innerText (visible text only)

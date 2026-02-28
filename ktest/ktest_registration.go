@@ -23,9 +23,31 @@ import (
 // This gives you the simplicity of Playwright with the organization of TestNG!
 // ========================================
 
+// TestRef holds a reference to a registered test, enabling fluent configuration.
+type TestRef struct {
+	test *NamedTest
+}
+
+// WithPriority sets the priority of the test. Returns the TestRef for chaining.
+// Alphabetical ordering: Priority.A runs first, then B, C, D, E.
+//
+// Usage:
+//
+//	ktest.Test("Cart1", func(page *kexas.Page, t ktest.KTestT) {
+//	    // test body
+//	}).WithPriority(ktest.Priority.A)
+func (tr *TestRef) WithPriority(priority TestPriority) *TestRef {
+	if tr == nil || tr.test == nil {
+		return tr
+	}
+	tr.test.Priority = priority
+	return tr
+}
+
 // Test registers a named test function with the current group context
-// or as a root-level test if no group is active
-func Test(name string, testFunc func(*kexas.Page, KTestT)) interface{} {
+// or as a root-level test if no group is active.
+// Returns a *TestRef that supports fluent chaining (e.g. .WithPriority()).
+func Test(name string, testFunc func(*kexas.Page, KTestT)) *TestRef {
 	if name == "" {
 		fmt.Println("❌ ktest.Test: name cannot be empty")
 		return nil
@@ -37,7 +59,24 @@ func Test(name string, testFunc func(*kexas.Page, KTestT)) interface{} {
 	}
 
 	// Register with current group if available, otherwise register globally
-	RegisterTestWithGroup(name, testFunc)
+	var ptr *NamedTest = RegisterTestWithGroup(name, testFunc)
+	return &TestRef{test: ptr}
+}
+
+// TestWithPriority registers a named test with explicit priority.
+// Higher priority tests are dispatched to workers first.
+func TestWithPriority(name string, priority TestPriority, testFunc func(*kexas.Page, KTestT)) interface{} {
+	if name == "" {
+		fmt.Println("❌ ktest.TestWithPriority: name cannot be empty")
+		return nil
+	}
+
+	if testFunc == nil {
+		fmt.Printf("❌ ktest.TestWithPriority: test function for '%s' cannot be nil\n", name)
+		return nil
+	}
+
+	RegisterTestWithGroupAndPriority(name, testFunc, priority)
 	return nil
 }
 
