@@ -400,13 +400,153 @@ if errors.Is(err, cdp.ErrTimeout) {
 
 ---
 
+## 13. objectId-First Pattern (Updated February 27, 2026)
+
+**Principle**: Prefer CDP `objectId` (Runtime domain) over `nodeId` (DOM domain) for element references.
+
+**Example**:
+```go
+// Element struct stores both, prefers objectId
+type Element struct {
+    nodeID   cdp.NodeID  // May be 0 for objectId-only elements
+    objectID string      // Preferred handle for all interactions
+}
+
+// resolveObjectID returns cached objectId or resolves from nodeId
+func (e *Element) resolveObjectID() (string, error) {
+    if e.objectID != "" {
+        return e.objectID, nil  // Fast path: use cached
+    }
+    // Slow path: resolve from nodeId via DOM.resolveNode
+    result, err := e.page.sendCommand("DOM.resolveNode", map[string]interface{}{"nodeId": e.nodeID})
+    // ... extract and cache objectId ...
+    e.objectID = objectID
+    return objectID, nil
+}
+```
+
+**Why**:
+- `nodeId` goes stale after navigation or DOM rebuild
+- `objectId` is more stable (only invalidated by execution context destruction)
+- `Runtime.callFunctionOn` requires `objectId`, which is used for all interactions
+- Fewer CDP round-trips when finding elements via `Runtime.evaluate`
+- This is the go-rod and Playwright pattern
+
+**Where Used**:
+- `findByCSS` and `findByID` return objectId-only elements
+- `Click()`, `Type()`, `IsVisible()`, `GetText()` all use `resolveObjectID()`
+
+---
+
+## 14. Retry-with-Timeout Pattern (Updated February 27, 2026)
+
+**Principle**: Retry operations that may fail due to timing (SPA rendering, network delays) with a bounded timeout and fixed poll interval.
+
+**Example**:
+```go
+var timeout time.Duration = 10 * time.Second
+var pollInterval time.Duration = 200 * time.Millisecond
+var start time.Time = time.Now()
+var lastErr error
+
+for time.Since(start) < timeout {
+    elem, err := p.findByCSS(selector)
+    if err == nil && elem != nil {
+        return elem, nil
+    }
+    lastErr = err
+    time.Sleep(pollInterval)
+}
+// Log diagnostic context (e.g., page title) before returning error
+return nil, lastErr
+```
+
+**Why**:
+- SPA frameworks render content asynchronously after navigation
+- Elements may appear 1-5 seconds after `document.readyState == "complete"`
+- Fixed timeout prevents infinite waits
+- Poll interval balances responsiveness vs CPU usage
+
+**Where Used**:
+- `Find()` — 10s timeout, 200ms poll
+- `WaitForLoad()` — configurable timeout, 100ms poll
+- `WaitForElementVisible()` — configurable timeout
+- `WaitForElementClickable()` — configurable timeout
+
+---
+
+## 15. Dual Guard Pattern (Updated February 27, 2026)
+
+**Principle**: Guard clauses should accept elements with *either* a valid `nodeId` *or* a valid `objectId`, not require both.
+
+**Example**:
+```go
+// CORRECT: Accept either identifier
+if e.nodeID <= 0 && e.objectID == "" {
+    return errors.ErrElementInvalidNodeID
+}
+
+// WRONG: Rejects valid objectId-only elements
+if e.nodeID <= 0 {
+    return errors.ErrElementInvalidNodeID
+}
+```
+
+**Why**:
+- `findByCSS` and `findByID` create elements with `objectId` only (nodeId = 0)
+- `findByXPath` creates elements with `nodeId` only (objectId = "")
+- Interaction methods must work with both kinds of elements
+
+**Where Used**:
+- `Click()`, `WaitAndClick()`, `WaitAndClickFor()`
+- `Type()`, `WaitAndType()`, `WaitAndTypeFor()`
+- `Hover()`, `WaitAndHover()`, `WaitAndHoverFor()`
+- `GetText()`, `IsVisible()`
+
+---
+
+## 16. Eager vs Lazy Agent Enablement (Updated February 27, 2026)
+
+**Principle**: Enable stealth-critical CDP domains eagerly (before navigation), and operational domains lazily (on first use).
+
+**Example**:
+```go
+// EAGER: In attachToPage(), before any navigation
+_, _ = b.client.SendToSession(ctx, sessionID, "Network.enable", nil)
+_, _ = b.client.SendToSession(ctx, sessionID, "Page.enable", nil)
+// Apply stealth overrides immediately after
+
+// LAZY: In sendCommand(), before each CDP operation
+func (p *Page) ensureAgentsForCommand(method string) error {
+    switch method {
+    case "Runtime.evaluate":
+        return p.agentManager.EnsureAgent("Runtime")  // Enable on first use
+    case "DOM.querySelector":
+        return p.agentManager.EnsureAgent("DOM")
+    }
+}
+```
+
+**Why**:
+- Network.enable must be called before setUserAgentOverride (order dependency)
+- Page.enable must be called before addScriptToEvaluateOnNewDocument
+- DOM and Runtime can be enabled lazily — no ordering constraint
+- Input domain is auto-enabled (no .enable() call needed)
+
+**Where Used**:
+- `browser.go` `attachToPage()` — eager stealth enablement
+- `page.go` `ensureAgentsForCommand()` — lazy operational enablement
+
+---
+
 ## Summary
 
 These patterns are used consistently throughout Kexas to ensure:
-- **Reliability**: Fail-fast, explicit types, proper cleanup
+- **Reliability**: Fail-fast, explicit types, proper cleanup, objectId-first
 - **Concurrency**: Thread-safe, atomic operations, goroutines
 - **Maintainability**: Clear code, guard clauses, structured logging
 - **Usability**: Clean API, optional parameters, good defaults
+- **SPA Compatibility**: Retry-with-timeout, Input.dispatchKeyEvent typing, dual guards
 
 See `CODING_RULES.md` for enforcement of these patterns.
 

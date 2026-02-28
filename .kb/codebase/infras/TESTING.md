@@ -522,6 +522,140 @@ jobs:
 
 ---
 
+## Early Bailout Pattern (Updated February 27, 2026)
+
+Integration tests that involve multi-step browser flows should **abort immediately on first failure** instead of continuing through doomed subsequent steps.
+
+### Why Not `t.Fatal()` / `t.Fatalf()`
+
+The `KTestT` interface's `Fatal` and `Fatalf` call `os.Exit(1)`, which:
+- Kills the entire process immediately
+- Skips `defer` cleanup (browser close, temp file removal)
+- Leaves orphan Chromium processes and occupied ports
+
+### Recommended Pattern: `t.Errorf()` + `return`
+
+```go
+func TestAmazonSignInComplete(t ktest.KTestT) {
+    // Step 1: Navigate
+    err = page.Navigate("https://www.amazon.com/")
+    if err != nil {
+        t.Errorf("Step 1 failed: %v", err)
+        return  // Bail out, defer cleanup still runs
+    }
+
+    // Step 2: Find sign-in link
+    signInLink, err := page.Find("a[data-nav-ref='nav_ya_signin']")
+    if err != nil {
+        t.Errorf("Step 2 failed: %v", err)
+        return
+    }
+
+    // ... subsequent steps follow same pattern
+}
+```
+
+**Benefits**:
+- `defer` blocks execute normally (browser closes, ports released)
+- Clear error message identifies exactly which step failed
+- No wasted 10-second `Find()` timeout per subsequent doomed step
+
+---
+
+## Port Conflict Between Sequential Tests (Updated February 27, 2026)
+
+When running multiple browser tests sequentially, the OS may not release the debugging port (default: 9222) immediately after the browser process is killed.
+
+### Symptom
+```
+failed to extract debugger URL: ...
+```
+
+### Root Cause
+The previous test's `Browser.Close()` → `Launcher.Close()` kills the Chromium process, but the OS may hold the port in `TIME_WAIT` state for several hundred milliseconds.
+
+### Fix
+`launcher.Close()` uses an adaptive polling mechanism to wait for the port to be released:
+
+```go
+func (b *Browser) Close() error {
+    // Kill browser process
+    b.cmd.Process.Kill()
+    b.cmd.Wait()
+    
+    // Poll for port release with 3s timeout and 150ms intervals
+    var portTimeout time.Duration = 3 * time.Second
+    var pollInterval time.Duration = 150 * time.Millisecond
+    
+    for time.Since(start) < portTimeout {
+        if isPortAvailable(b.port) {
+            break // Port released, continue immediately
+        }
+        time.Sleep(pollInterval)
+    }
+    
+    // Clean up temp profile
+    os.RemoveAll(b.userDataDir)
+}
+```
+
+**Benefits**:
+- **Faster cleanup**: If the port releases quickly (e.g., 300ms), the test continues immediately instead of waiting the full 2 seconds
+- **Adaptive timeout**: Waits up to 3 seconds if needed, but typically much less
+- **Better reliability**: Actively checks port availability instead of guessing
+
+### Test Selector Best Practices
+
+When writing selectors for real-world sites:
+- **Avoid hardcoded IDs** that change between site updates (e.g., `#continue`, `#auth-signin-button`)
+- **Prefer attribute selectors** that are more stable (e.g., `input[type='submit']`)
+- **Use data attributes** when available (e.g., `a[data-nav-ref='nav_ya_signin']`)
+
+---
+
+## Test Filtering with KEXAS_TEST_RUN (Updated February 27, 2026)
+
+For AlphaInit/Group registered tests, you can filter which tests to run using the `KEXAS_TEST_RUN` environment variable.
+
+### Usage
+
+```bash
+# Run a specific test by exact name
+KEXAS_TEST_RUN=TestAmazonSignInComplete go run signin_tests.go
+
+# Run tests matching a partial string (contains)
+KEXAS_TEST_RUN=SignInComplete go run signin_tests.go
+KEXAS_TEST_RUN=LoginOnly go run signin_tests.go
+
+# Run all tests (no filter)
+go run signin_tests.go
+```
+
+### Behavior
+
+- **Exact match**: If the filter exactly matches a test name, only that test runs
+- **Partial match**: If the filter is contained within a test name, that test runs
+- **No matches**: If no tests match, the framework lists available tests and exits
+- **No filter**: If `KEXAS_TEST_RUN` is not set, all registered tests run
+
+### Example Output
+
+```bash
+$ KEXAS_TEST_RUN=TestAmazonSignInComplete go run signin_tests.go
+🔍 KEXAS_TEST_RUN filter: TestAmazonSignInComplete
+📋 Running 1 filtered test(s):
+  - Amazon Sign-In Flow.TestAmazonSignInComplete
+```
+
+### Supported Test Types
+
+This filtering works for:
+- AlphaInit registered tests (`ktest.Test("name", ...)`)
+- Group-based tests (`ktest.Group(...)` with nested tests)
+- Both root-level and grouped tests
+
+---
+
 ## Summary
 
 Testing strategy:
@@ -530,5 +664,8 @@ Testing strategy:
 - **Naming**: `Test<Function>_<Scenario>`
 - **Framework**: Standard `testing` for units, `ktest` for integration
 - **Assertions**: Use `kassert` for clear, fluent assertions
+- **Early bailout**: Use `t.Errorf()` + `return`, never `t.Fatal()` (preserves defer cleanup)
+- **Port conflicts**: Adaptive port polling (3s timeout, 150ms intervals) in `Browser.Close()` between sequential tests
+- **Test filtering**: Use `KEXAS_TEST_RUN` environment variable to run specific tests
 - **Coverage**: Critical paths first, then errors, then edge cases
 

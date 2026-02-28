@@ -3,14 +3,20 @@ package ktest
 import (
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 )
 
 // ktestT is our own implementation of KTestT for the Main() API.
+// Thread-safe: all mutable state is guarded by mu.
 type ktestT struct {
-	name     string
-	failed   bool
-	depth    int
+	name   string
+	failed bool
+	depth  int
+	mu     sync.Mutex
+	errors []string   // collected error messages for report
+	steps  []testStep // collected test steps for report
+	logs   []string   // collected console output for report
 }
 
 // newKTestT creates a new ktestT instance.
@@ -27,37 +33,62 @@ func (t *ktestT) Helper() {
 }
 
 func (t *ktestT) Log(args ...interface{}) {
-	fmt.Println(args...)
+	t.mu.Lock()
+	var msg string = fmt.Sprint(args...)
+	fmt.Println(msg)
+	t.logs = append(t.logs, msg)
+	t.mu.Unlock()
 }
 
 func (t *ktestT) Logf(format string, args ...interface{}) {
-	fmt.Printf(format+"\n", args...)
+	t.mu.Lock()
+	var msg string = fmt.Sprintf(format, args...)
+	fmt.Println(msg)
+	t.logs = append(t.logs, msg)
+	t.mu.Unlock()
 }
 
 func (t *ktestT) Error(args ...interface{}) {
-	fmt.Println(args...)
+	t.mu.Lock()
+	var msg string = fmt.Sprint(args...)
+	fmt.Println(msg)
 	t.failed = true
+	t.errors = append(t.errors, msg)
+	t.logs = append(t.logs, "ERROR: "+msg)
+	t.mu.Unlock()
 }
 
 func (t *ktestT) Errorf(format string, args ...interface{}) {
-	fmt.Printf(format+"\n", args...)
+	t.mu.Lock()
+	var msg string = fmt.Sprintf(format, args...)
+	fmt.Println(msg)
 	t.failed = true
+	t.errors = append(t.errors, msg)
+	t.logs = append(t.logs, "ERROR: "+msg)
+	t.mu.Unlock()
 }
 
 func (t *ktestT) Fatal(args ...interface{}) {
+	t.mu.Lock()
 	fmt.Println(args...)
 	t.failed = true
+	t.mu.Unlock()
 	os.Exit(1)
 }
 
 func (t *ktestT) Fatalf(format string, args ...interface{}) {
+	t.mu.Lock()
 	fmt.Printf(format+"\n", args...)
 	t.failed = true
+	t.mu.Unlock()
 	os.Exit(1)
 }
 
 func (t *ktestT) Failed() bool {
-	return t.failed
+	t.mu.Lock()
+	var f bool = t.failed
+	t.mu.Unlock()
+	return f
 }
 
 func (t *ktestT) Name() string {
@@ -70,15 +101,15 @@ func (t *ktestT) Run(name string, f func(KTestT)) bool {
 		failed: false,
 		depth:  t.depth + 1,
 	}
-	
-	defer func() {
-		if childT.failed {
-			t.failed = true
-		}
-	}()
-	
+
 	f(childT)
-	return !childT.failed
+
+	if childT.Failed() {
+		t.mu.Lock()
+		t.failed = true
+		t.mu.Unlock()
+	}
+	return !childT.Failed()
 }
 
 // testingTWrapper wraps *testing.T to implement KTestT.

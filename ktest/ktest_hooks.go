@@ -2,6 +2,7 @@ package ktest
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/kexas-project/kexas"
 )
@@ -30,8 +31,9 @@ import (
 //   )
 // ========================================
 
-// Global hooks storage
+// Global hooks storage (mutex-protected for parallel safety)
 var (
+	globalHooksMu    sync.Mutex
 	globalBeforeAll  func()
 	globalAfterAll   func()
 	globalBeforeEach func(*kexas.Page)
@@ -45,7 +47,9 @@ func BeforeAll(hookFunc func()) interface{} {
 		return nil
 	}
 
+	globalHooksMu.Lock()
 	globalBeforeAll = hookFunc
+	globalHooksMu.Unlock()
 	fmt.Println("✅ ktest.BeforeAll: Global before-all hook registered")
 	return nil
 }
@@ -57,7 +61,9 @@ func AfterAll(hookFunc func()) interface{} {
 		return nil
 	}
 
+	globalHooksMu.Lock()
 	globalAfterAll = hookFunc
+	globalHooksMu.Unlock()
 	fmt.Println("✅ ktest.AfterAll: Global after-all hook registered")
 	return nil
 }
@@ -69,7 +75,9 @@ func BeforeEach(hookFunc func(*kexas.Page)) interface{} {
 		return nil
 	}
 
+	globalHooksMu.Lock()
 	globalBeforeEach = hookFunc
+	globalHooksMu.Unlock()
 	fmt.Println("✅ ktest.BeforeEach: Global before-each hook registered")
 	return nil
 }
@@ -81,70 +89,90 @@ func AfterEach(hookFunc func(*kexas.Page)) interface{} {
 		return nil
 	}
 
+	globalHooksMu.Lock()
 	globalAfterEach = hookFunc
+	globalHooksMu.Unlock()
 	fmt.Println("✅ ktest.AfterEach: Global after-each hook registered")
 	return nil
 }
 
 // GetGlobalBeforeAll returns the registered global BeforeAll hook
 func GetGlobalBeforeAll() func() {
-	return globalBeforeAll
+	globalHooksMu.Lock()
+	var hook func() = globalBeforeAll
+	globalHooksMu.Unlock()
+	return hook
 }
 
 // GetGlobalAfterAll returns the registered global AfterAll hook
 func GetGlobalAfterAll() func() {
-	return globalAfterAll
+	globalHooksMu.Lock()
+	var hook func() = globalAfterAll
+	globalHooksMu.Unlock()
+	return hook
 }
 
 // GetGlobalBeforeEach returns the registered global BeforeEach hook
 func GetGlobalBeforeEach() func(*kexas.Page) {
-	return globalBeforeEach
+	globalHooksMu.Lock()
+	var hook func(*kexas.Page) = globalBeforeEach
+	globalHooksMu.Unlock()
+	return hook
 }
 
 // GetGlobalAfterEach returns the registered global AfterEach hook
 func GetGlobalAfterEach() func(*kexas.Page) {
-	return globalAfterEach
+	globalHooksMu.Lock()
+	var hook func(*kexas.Page) = globalAfterEach
+	globalHooksMu.Unlock()
+	return hook
 }
 
 // ExecuteGlobalBeforeAll executes the global BeforeAll hook if registered
 func ExecuteGlobalBeforeAll() {
-	if globalBeforeAll != nil {
+	var hook func() = GetGlobalBeforeAll()
+	if hook != nil {
 		fmt.Println("🚀 ktest: Executing global BeforeAll hook")
-		globalBeforeAll()
+		hook()
 	}
 }
 
 // ExecuteGlobalAfterAll executes the global AfterAll hook if registered
 func ExecuteGlobalAfterAll() {
-	if globalAfterAll != nil {
+	var hook func() = GetGlobalAfterAll()
+	if hook != nil {
 		fmt.Println("🏁 ktest: Executing global AfterAll hook")
-		globalAfterAll()
+		hook()
 	}
 }
 
 // ExecuteGlobalBeforeEach executes the global BeforeEach hook if registered
 func ExecuteGlobalBeforeEach(page *kexas.Page) {
-	if globalBeforeEach != nil {
+	var hook func(*kexas.Page) = GetGlobalBeforeEach()
+	if hook != nil {
 		fmt.Println("📖 ktest: Executing global BeforeEach hook")
-		globalBeforeEach(page)
+		hook(page)
 	}
 }
 
 // ExecuteGlobalAfterEach executes the global AfterEach hook if registered
 func ExecuteGlobalAfterEach(page *kexas.Page) {
-	if globalAfterEach != nil {
+	var hook func(*kexas.Page) = GetGlobalAfterEach()
+	if hook != nil {
 		fmt.Println("🧹 ktest: Executing global AfterEach hook")
-		globalAfterEach(page)
+		hook(page)
 	}
 }
 
 // ResetGlobalHooks clears all registered global hooks
 // Useful for testing or when you want to re-register hooks
 func ResetGlobalHooks() {
+	globalHooksMu.Lock()
 	globalBeforeAll = nil
 	globalAfterAll = nil
 	globalBeforeEach = nil
 	globalAfterEach = nil
+	globalHooksMu.Unlock()
 	fmt.Println("🔄 ktest: Global hooks reset")
 }
 

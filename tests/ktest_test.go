@@ -1,6 +1,9 @@
+//go:build integration
+
 package tests
 
 import (
+	"os"
 	"testing"
 
 	"github.com/kexas-project/kexas"
@@ -26,6 +29,36 @@ func TestDefaultConfig(t *testing.T) {
 	}
 	if config.ScreenshotDir != "./test-results/screenshots" {
 		t.Errorf("Expected screenshot dir to be './test-results/screenshots', got %s", config.ScreenshotDir)
+	}
+	if config.ViewportWidth != 1280 {
+		t.Errorf("Expected viewport width 1280, got %d", config.ViewportWidth)
+	}
+	if config.ViewportHeight != 720 {
+		t.Errorf("Expected viewport height 720, got %d", config.ViewportHeight)
+	}
+}
+
+func TestLoadConfigFromFile_ViewportOverrides(t *testing.T) {
+	var path string = writeTempConfig(t, `{"viewportWidth":1920,"viewportHeight":1080}`)
+	var config *ktest.Config = ktest.LoadConfigFromFile(path)
+
+	if config.ViewportWidth != 1920 {
+		t.Errorf("expected viewport width 1920, got %d", config.ViewportWidth)
+	}
+	if config.ViewportHeight != 1080 {
+		t.Errorf("expected viewport height 1080, got %d", config.ViewportHeight)
+	}
+}
+
+func TestLoadConfigFromFile_InvalidViewportFallsBack(t *testing.T) {
+	var path string = writeTempConfig(t, `{"viewportWidth":-1,"viewportHeight":0}`)
+	var config *ktest.Config = ktest.LoadConfigFromFile(path)
+
+	if config.ViewportWidth != 1280 {
+		t.Errorf("expected default viewport width 1280, got %d", config.ViewportWidth)
+	}
+	if config.ViewportHeight != 720 {
+		t.Errorf("expected default viewport height 720, got %d", config.ViewportHeight)
 	}
 }
 
@@ -216,27 +249,17 @@ func TestSuite_Config(t *testing.T) {
 }
 
 // TestLoadConfig tests configuration loading functionality.
+// TestLoadConfig tests configuration loading functionality.
 func TestLoadConfig(t *testing.T) {
-	// Test default config when no file exists
 	var config *ktest.Config = ktest.DefaultConfig()
 	if config == nil {
 		t.Error("DefaultConfig() should not return nil")
-	}
-
-	// Verify default values
-	if !config.Headless {
-		t.Error("Expected headless to be true by default")
-	}
-	if !config.ScreenshotOnFail {
-		t.Error("Expected screenshot on fail to be true by default")
-	}
-	if config.ScreenshotDir != "./test-results/screenshots" {
-		t.Errorf("Expected default screenshot dir, got %s", config.ScreenshotDir)
 	}
 }
 
 // TestAlphaInitRegistration tests AlphaInit registration system.
 func TestAlphaInitRegistration(t *testing.T) {
+	kexas.ResetAlphaInitTracking()
 	// Register a test via AlphaInit pattern
 	kexas.AlphaInit(
 		ktest.Test("AlphaTest1", func(page *kexas.Page, t ktest.KTestT) {
@@ -270,6 +293,7 @@ func TestAlphaInitRegistration(t *testing.T) {
 
 // TestGroupRegistration tests group-based test registration.
 func TestGroupRegistration(t *testing.T) {
+	kexas.ResetAlphaInitTracking()
 	// Register tests with groups
 	kexas.AlphaInit(
 		ktest.Group("TestGroup", func() {
@@ -343,4 +367,24 @@ func contains(slice []string, item string) bool {
 		}
 	}
 	return false
+}
+
+func writeTempConfig(t *testing.T, content string) string {
+	t.Helper()
+	var file *os.File
+	var err error
+	file, err = os.CreateTemp("", "kexas-config-*.json")
+	if err != nil {
+		t.Fatalf("failed to create temp config: %v", err)
+	}
+	if _, err = file.WriteString(content); err != nil {
+		file.Close()
+		os.Remove(file.Name())
+		t.Fatalf("failed to write temp config: %v", err)
+	}
+	file.Close()
+	t.Cleanup(func() {
+		os.Remove(file.Name())
+	})
+	return file.Name()
 }

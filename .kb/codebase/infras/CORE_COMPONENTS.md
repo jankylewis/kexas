@@ -305,9 +305,164 @@ User Code
 
 ---
 
+## 7. Element (`element.go`, `element_methods.go`)
+
+**Purpose**: Represents a DOM element and provides query methods.
+
+**Last Updated:** February 27, 2026
+
+**Key Responsibilities**:
+- Store element reference (objectId and/or nodeId)
+- Resolve objectId from nodeId when needed (lazy, cached)
+- Check element visibility via JavaScript
+- Retrieve text content and attributes
+
+**Internal State**:
+- `page` - Parent page reference
+- `selector` - Original selector used to find the element
+- `nodeID` - CDP node identifier (may be 0 for objectId-only elements)
+- `objectID` - CDP remote object ID (preferred handle for all interactions)
+- `timeout` - Default timeout for operations
+
+**Key Methods**:
+- `IsVisible()` - Check visibility via `Runtime.callFunctionOn` with computed style
+- `GetText()` - Get `innerText` via `Runtime.callFunctionOn`
+- `GetAttribute(name)` - Get attribute via `DOM.getAttributes`
+- `Validate()` - Check if node still exists via `DOM.describeNode`
+- `resolveObjectID()` - Resolve and cache objectId from nodeId
+
+**Constructors**:
+- `NewElement(page, selector, nodeID, timeout)` - Legacy, nodeId-based
+- `NewElementWithObject(page, selector, nodeID, objectID, timeout)` - Preferred, objectId-based
+
+---
+
+## 8. Element Interaction (`element_interaction.go`)
+
+**Purpose**: Action methods for interacting with DOM elements.
+
+**Last Updated:** February 27, 2026
+
+**Key Responsibilities**:
+- Click elements via `Runtime.callFunctionOn` with `this.click()`
+- Type text via `Input.dispatchKeyEvent` (per-character keyboard events)
+- Hover over elements via `MouseEvent` dispatch
+- Wait for element states before interaction
+
+**Key Methods**:
+- `Click()` / `WaitAndClick()` / `WaitAndClickFor(timeout)` - Click actions
+- `Type(text)` - Type using CDP keyboard events (SPA-compatible)
+- `WaitAndType(text)` / `WaitAndTypeFor(text, timeout)` - Type with JS value assignment
+- `Hover()` / `WaitAndHover()` / `WaitAndHoverFor(timeout)` - Hover actions
+
+**Critical Design Decision**: `Type()` uses `Input.dispatchKeyEvent` per character (like go-rod/Playwright) instead of JavaScript `this.value = text`. This is required for SPA frameworks (React, Angular) that listen to real keyboard events.
+
+---
+
+## 9. Page Find (`page_find.go`)
+
+**Purpose**: Element finding with auto-retry for SPA rendering delays.
+
+**Last Updated:** February 27, 2026
+
+**Key Responsibilities**:
+- Auto-detect selector type (CSS, ID, XPath)
+- Retry finding for up to 10 seconds (200ms poll interval)
+- Log page title on timeout for debugging
+
+**Key Methods**:
+- `Find(selector)` - Auto-detect and retry
+- `FindByXPath(xpath)` - Public XPath wrapper
+- `findByCSS(selector)` - `Runtime.evaluate` + `document.querySelector`
+- `findByID(id)` - `Runtime.evaluate` + `document.getElementById`
+- `findByXPath(xpath)` - `DOM.performSearch` + `DOM.getSearchResults`
+
+**objectId-first pattern**: `findByCSS` and `findByID` return elements with `objectId` only (no nodeId). `findByXPath` returns elements with `nodeId` only (objectId resolved lazily).
+
+---
+
+## 10. Agent Manager (`internal/agent/`)
+
+**Purpose**: Lazy CDP domain enablement with state caching.
+
+**Last Updated:** February 27, 2026
+
+**Key Responsibilities**:
+- Track which CDP agents are enabled per session
+- Enable agents on demand (lazy enablement)
+- Cache agent context (document root node, execution context ID)
+- Thread-safe operations via `sync.RWMutex`
+
+**Key Files**:
+- `agent_manager.go` - `AgentManager` struct and initialization
+- `smart_enablement.go` - `EnsureAgent()`, `EnsureAgents()`, `WaitForAgentReady()`
+- `enabled_agents.go` - `EnabledAgents` tracking struct with agent constants
+- `operations.go` - `Disable()`, `DisableAll()`, `ResetAgent()`, `Stats()`
+- `agent_context.go` - Context types for DOM, Input, Runtime, etc.
+
+**Key Methods**:
+- `EnsureAgent(name)` - Enable agent if not already enabled (core method)
+- `EnsureAgents(names...)` - Enable multiple agents in parallel
+- `IsAgentReady(name)` - Check if agent is enabled and has context
+- `ResetAgent(name)` - Force re-enablement on next use (after navigation)
+
+**Agent Constants**: `DOM`, `Input`, `Runtime`, `Network`, `Page`, `Security`, `Debugger`, `Profiler`
+
+**Integration**: `Page.sendCommand()` calls `ensureAgentsForCommand(method)` which maps CDP command names to required agents and calls `AgentManager.EnsureAgent()`.
+
+---
+
+## Component Interaction (Updated)
+
+```
+User Code
+    │
+    ├─> Browser.Launch()
+    │       │
+    │       ├─> Launcher.Launch() → Start process
+    │       └─> CDP.Connect() → WebSocket
+    │
+    ├─> Browser.NewPage()
+    │       │
+    │       ├─> CDP.Send("Target.createTarget")
+    │       ├─> CDP.Send("Target.attachToTarget") → sessionId
+    │       ├─> Stealth: Network.enable → Network.setUserAgentOverride
+    │       ├─> Stealth: Page.enable → Page.addScriptToEvaluateOnNewDocument
+    │       └─> Create AgentManager(cdp, sessionId)
+    │
+    ├─> Page.Navigate()
+    │       │
+    │       ├─> ensureAgentsForCommand("Page.navigate") → EnsureAgent("Page")
+    │       ├─> CDP.SendToSession("Page.navigate")
+    │       └─> kwait.ForPageLoad()
+    │
+    ├─> Page.Find(selector)
+    │       │
+    │       ├─> Retry loop (10s, 200ms poll)
+    │       ├─> ensureAgentsForCommand("Runtime.evaluate") → EnsureAgent("Runtime")
+    │       ├─> Runtime.evaluate(document.querySelector) → objectId
+    │       └─> Return Element{objectId}
+    │
+    ├─> Element.Click() / Element.Type(text)
+    │       │
+    │       ├─> resolveObjectID() → cached or DOM.resolveNode
+    │       ├─> Runtime.callFunctionOn(objectId, ...) [Click/Focus]
+    │       └─> Input.dispatchKeyEvent per char [Type only]
+    │
+    └─> Browser.Close()
+            │
+            ├─> CDP.Close() → Close WebSocket
+            └─> Launcher.Close() → Kill process → 2s port release wait
+```
+
+---
+
 ## Next Steps
 
 - See `DESIGN_PATTERNS.md` for common patterns
 - See `DATA_FLOW.md` for detailed flow diagrams
 - See `KEY_CONCEPTS.md` for important concepts
+- See `.kb/browsers/ELEMENT_FINDING.md` for detailed element finding docs
+- See `.kb/browsers/ELEMENT_INTERACTION.md` for detailed interaction docs
+- See `.kb/browsers/STEALTH_ANTI_DETECTION.md` for stealth techniques
 

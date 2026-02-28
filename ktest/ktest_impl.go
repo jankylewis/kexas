@@ -1,7 +1,6 @@
 package ktest
 
 import (
-	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -181,20 +180,12 @@ func takeScreenshot(t KTestT, page *kexas.Page, testName string, dir string) {
 		return
 	}
 
-	// Decode base64
-	var imgData []byte
-	imgData, err = base64.StdEncoding.DecodeString(string(data))
-	if err != nil {
-		t.Logf("ktest: failed to decode screenshot: %v", err)
-		return
-	}
-
-	// Save to file
+	// Save to file - data is already PNG bytes from page.Screenshot()
 	var timestamp string = time.Now().Format("20060102-150405")
 	var filename string = fmt.Sprintf("%s-%s.png", testName, timestamp)
 	var filepath string = filepath.Join(dir, filename)
 
-	err = os.WriteFile(filepath, imgData, 0644)
+	err = os.WriteFile(filepath, data, 0644)
 	if err != nil {
 		t.Logf("ktest: failed to save screenshot: %v", err)
 		return

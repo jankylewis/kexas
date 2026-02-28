@@ -1,3 +1,4 @@
+
 package tests
 
 import (
@@ -16,8 +17,8 @@ func TestDefaultOptions(t *testing.T) {
 	if !opts.Headless {
 		t.Error("expected headless to be true by default")
 	}
-	if opts.Port != 9222 {
-		t.Errorf("expected default port 9222, got %d", opts.Port)
+	if opts.Port != 0 {
+		t.Errorf("expected default port 0 (dynamic assignment), got %d", opts.Port)
 	}
 	if opts.Args == nil {
 		t.Error("expected Args to be initialized")

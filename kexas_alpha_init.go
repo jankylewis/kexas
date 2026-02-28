@@ -2,7 +2,10 @@ package kexas
 
 import (
 	"fmt"
+	"path/filepath"
 	"reflect"
+	"runtime"
+	"sync"
 )
 
 // ========================================
@@ -25,12 +28,22 @@ import (
 // This gives you the TestNG/NUnit annotation experience in Go!
 // ========================================
 
+// alphaInitFiles tracks which source files have already called AlphaInit.
+// Only one AlphaInit call is allowed per .go file.
+var alphaInitFiles sync.Map
+
 // AlphaInit is the zero-boilerplate trigger function that registers
 // all test components (groups, hooks, tests) for later execution.
 // It can be called at package level without any boilerplate.
+// Only one AlphaInit call is allowed per source file.
 func AlphaInit(components ...interface{}) interface{} {
+	var callerFile string = alphaInitCallerFile()
+	if err := enforceOneAlphaInitPerFile(callerFile); err != nil {
+		panic(err)
+	}
+
 	fmt.Println("🔥 Kexas AlphaInit - Zero Boilerplate Trigger!")
-	fmt.Printf("📦 Registering %d components...\n", len(components))
+	fmt.Printf("📦 Registering %d components from %s...\n", len(components), callerFile)
 
 	// Process each component passed to AlphaInit
 	for i := 0; i < len(components); i++ {
@@ -44,11 +57,42 @@ func AlphaInit(components ...interface{}) interface{} {
 	return nil
 }
 
+// alphaInitCallerFile walks the call stack to find the user's source file.
+// Caller(0) = alphaInitCallerFile, Caller(1) = AlphaInit, Caller(2) = user file.
+func alphaInitCallerFile() string {
+	var _, file, _, ok = runtime.Caller(2)
+	if !ok {
+		return "unknown"
+	}
+	return filepath.Base(file)
+}
+
+// enforceOneAlphaInitPerFile returns an error if the file already called AlphaInit.
+func enforceOneAlphaInitPerFile(filename string) error {
+	if filename == "unknown" {
+		return nil
+	}
+	var _, loaded = alphaInitFiles.LoadOrStore(filename, true)
+	if loaded {
+		return fmt.Errorf("kexas: only one AlphaInit allowed per file, but '%s' called it twice", filename)
+	}
+	return nil
+}
+
+// ResetAlphaInitTracking clears the per-file tracking. Used only in tests.
+func ResetAlphaInitTracking() {
+	alphaInitFiles.Range(func(key interface{}, value interface{}) bool {
+		alphaInitFiles.Delete(key)
+		return true
+	})
+}
+
 // registerComponent processes a single component and registers it
 // with the appropriate ktest system
 func registerComponent(component interface{}) error {
+	// Skip nil components (hooks return nil after registration)
 	if component == nil {
-		return fmt.Errorf("component cannot be nil")
+		return nil
 	}
 
 	// Use reflection to determine component type
