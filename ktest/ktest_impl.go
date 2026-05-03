@@ -92,34 +92,8 @@ func runSingleTest(t KTestT, suiteValue reflect.Value, baseSuite *Suite, method 
 
 	t.Run(testName, func(t KTestT) {
 		var recorder *kexas.Recorder = startTestRecording(t, baseSuite.Page, config)
-
-		var attempts int = config.Retries + 1
-		var lastErr error
 		var start time.Time = time.Now()
-
-		for attempt := 0; attempt < attempts; attempt++ {
-			if attempt > 0 {
-				t.Logf("ktest: retry %d/%d for %s", attempt, config.Retries, testName)
-			}
-
-			var success bool = runTestAttempt(t, suiteValue, baseSuite, method, config)
-			if success {
-				elapsed = time.Since(start)
-				goto done
-			}
-			lastErr = fmt.Errorf("test failed")
-		}
-
-		passed = false
-		elapsed = time.Since(start)
-		errMsg = fmt.Sprintf("failed after %d attempts", attempts)
-		if lastErr != nil {
-			t.Errorf("ktest: %s failed after %d attempts", testName, attempts)
-		}
-
-	done:
-		// Always-on artifacts: end-of-test screenshot + video, regardless of pass/fail.
-		// Failures are logged but don't fail the test.
+		passed, elapsed, errMsg = runWithRetries(t, suiteValue, baseSuite, method, config, testName, start)
 		screenshotPath = captureEndOfTestScreenshot(t, baseSuite.Page, testName, config)
 		videoPath = stopAndSaveTestVideo(t, recorder, testName, config)
 	})
@@ -221,6 +195,23 @@ func suiteFilename(suiteValue reflect.Value) string {
 }
 
 // runTestAttempt runs a single attempt of a test.
+// runWithRetries runs the test up to config.Retries+1 times. Returns
+// (passed, elapsed, errMsg). Logs each retry. Records final failure on `t`.
+func runWithRetries(t KTestT, suiteValue reflect.Value, baseSuite *Suite, method reflect.Method, config *Config, testName string, start time.Time) (bool, time.Duration, string) {
+	var attempts int = config.Retries + 1
+	for attempt := 0; attempt < attempts; attempt++ {
+		if attempt > 0 {
+			t.Logf("ktest: retry %d/%d for %s", attempt, config.Retries, testName)
+		}
+		var success bool = runTestAttempt(t, suiteValue, baseSuite, method, config)
+		if success {
+			return true, time.Since(start), ""
+		}
+	}
+	t.Errorf("ktest: %s failed after %d attempts", testName, attempts)
+	return false, time.Since(start), fmt.Sprintf("failed after %d attempts", attempts)
+}
+
 func runTestAttempt(t KTestT, suiteValue reflect.Value, baseSuite *Suite, method reflect.Method, config *Config) bool {
 	baseSuite.SetT(t)
 

@@ -18,43 +18,57 @@ func (c *Client) SendToSession(ctx context.Context, sessionID string, method str
 	if c.closed.Load() {
 		return nil, ErrConnectionClosed
 	}
-
 	var id int64 = c.nextID.Add(1)
+	var req *Request = &Request{ID: id, Method: method, Params: params, SessionID: sessionID}
+	var respChan chan *Response = c.registerPending(id)
+	defer c.unregisterPending(id)
 
-	// For flat protocol, include sessionId as a top-level field in the request
-	var req *Request = &Request{
-		ID:        id,
-		Method:    method,
-		Params:    params,
-		SessionID: sessionID,
+	c.log.Debug("→ sending command", "id", id, "method", method, "params", params, "sessionId", sessionID)
+	var err error = c.marshalAndWrite(ctx, req)
+	if err != nil {
+		return nil, err
 	}
+	return c.awaitResponse(ctx, id, respChan)
+}
 
+// registerPending creates a buffered response channel and stores it under id
+// so the read loop can route the matching response back to this caller.
+func (c *Client) registerPending(id int64) chan *Response {
 	var respChan chan *Response = make(chan *Response, 1)
 	c.pendingMu.Lock()
 	c.pending[id] = respChan
 	c.pendingMu.Unlock()
+	return respChan
+}
 
-	defer func() {
-		c.pendingMu.Lock()
-		delete(c.pending, id)
-		c.pendingMu.Unlock()
-	}()
+// unregisterPending removes the pending entry. Safe to call after a response
+// arrives (no-op) or when bailing out early.
+func (c *Client) unregisterPending(id int64) {
+	c.pendingMu.Lock()
+	delete(c.pending, id)
+	c.pendingMu.Unlock()
+}
 
-	c.log.Debug("→ sending command", "id", id, "method", method, "params", params, "sessionId", sessionID)
-
+// marshalAndWrite serialises req and writes it to the WebSocket. Returns the
+// first failing step's wrapped error.
+func (c *Client) marshalAndWrite(ctx context.Context, req *Request) error {
 	var data []byte
 	var err error
 	data, err = json.Marshal(req)
 	if err != nil {
-		return nil, fmt.Errorf("cdp: failed to marshal request: %w", err)
+		return fmt.Errorf("cdp: failed to marshal request: %w", err)
 	}
-
 	err = c.conn.Write(ctx, websocket.MessageText, data)
 	if err != nil {
 		c.log.Error("failed to send command", "err", err)
-		return nil, fmt.Errorf("cdp: failed to send command: %w", err)
+		return fmt.Errorf("cdp: failed to send command: %w", err)
 	}
+	return nil
+}
 
+// awaitResponse blocks until the matching response arrives or ctx (caller or
+// connection-level) is cancelled.
+func (c *Client) awaitResponse(ctx context.Context, id int64, respChan chan *Response) (map[string]interface{}, error) {
 	var resp *Response
 	select {
 	case resp = <-respChan:

@@ -11,11 +11,12 @@ The five rules in this folder formalize stricter requirements not fully covered 
 | # | Rule | File |
 |---|---|---|
 | 01 | File size limits — 230 lines source / 350 lines test | [`01_FILE_SIZE.md`](01_FILE_SIZE.md) |
-| 02 | Function size — 50 logical lines max per function | [`02_FUNCTION_SIZE.md`](02_FUNCTION_SIZE.md) |
+| 02 | Function size — 40 logical lines max per function | [`02_FUNCTION_SIZE.md`](02_FUNCTION_SIZE.md) |
 | 03 | Explicit types — no `:=` except in 4 init/range constructs | [`03_EXPLICIT_TYPES.md`](03_EXPLICIT_TYPES.md) |
 | 04 | Acronym naming — true acronyms ALL CAPS, abbreviations camelCase | [`04_NAMING_ACRONYMS.md`](04_NAMING_ACRONYMS.md) |
 | 05 | Package structure — `kcore/` with root re-export shims | [`05_KCORE_STRUCTURE.md`](05_KCORE_STRUCTURE.md) |
 | 06 | Markdown files — <200 lines, ALL_UPPERCASED stem | [`06_MARKDOWN_FILES.md`](06_MARKDOWN_FILES.md) |
+| 07 | KB live-sync — memory writes mirror to `.kb/` same turn | [`07_KB_LIVE_SYNC.md`](07_KB_LIVE_SYNC.md) |
 
 ## Enforcement
 

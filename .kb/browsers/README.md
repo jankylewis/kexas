@@ -87,7 +87,7 @@ This folder contains all documentation related to browser management, downloads,
 ## Quick Tasks
 
 ### Change Chrome Version
-1. Edit `launcher/downloader.go`
+1. Edit `klauncher/downloader.go`
 2. Change `ChromeReleaseChannel` constant
 3. Remove cache: `rm -rf ~/.kexas/browsers/chrome-*`
 4. Run tests: `go test -v ./tests`
@@ -191,8 +191,8 @@ curl -s https://googlechromelabs.github.io/chrome-for-testing/last-known-good-ve
 
 ## Related Code
 
-- **launcher/downloader.go** - Browser download implementation
-- **launcher/launcher.go** - Browser launch logic
+- **klauncher/downloader.go** - Browser download implementation
+- **klauncher/launcher.go** - Browser launch logic
 - **browser.go** - Browser control API
 - **page.go** - Page automation API
 

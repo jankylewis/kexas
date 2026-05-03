@@ -42,6 +42,13 @@ func (c *Client) Options(path string) (*Response, error) {
 	return c.newRequest(http.MethodOptions, path).Send()
 }
 
+// Trace sends a TRACE request and returns a Response. RFC 9110 §9.3.8 — used
+// to echo the received request for debugging proxies / loop detection.
+// Most servers either disable TRACE for security or return the request as-is.
+func (c *Client) Trace(path string) (*Response, error) {
+	return c.newRequest(http.MethodTrace, path).Send()
+}
+
 // Request creates a RequestBuilder for the given method and path.
 // Use this for requests that need query params, custom headers, or form bodies.
 func (c *Client) Request(method string, path string) *RequestBuilder {

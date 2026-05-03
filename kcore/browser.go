@@ -8,13 +8,13 @@ import (
 
 	"github.com/jankylewis/kexas/internal/cdp"
 	"github.com/jankylewis/kexas/internal/logger"
-	"github.com/jankylewis/kexas/launcher"
+	"github.com/jankylewis/kexas/klauncher"
 )
 
 
 // Browser represents a browser instance with CDP connection.
 type Browser struct {
-	process *launcher.Browser
+	process *klauncher.Browser
 	client  *cdp.Client
 	log     *logger.Logger
 	ctx     context.Context
@@ -23,20 +23,20 @@ type Browser struct {
 }
 
 // Launch starts a new browser instance and connects via CDP.
-func Launch(opts *launcher.Options) (*Browser, error) {
+func Launch(opts *klauncher.Options) (*Browser, error) {
 	var ctx context.Context = context.Background()
 	return LaunchWithContext(ctx, opts)
 }
 
 // LaunchWithContext starts a new browser with a custom context.
-func LaunchWithContext(ctx context.Context, opts *launcher.Options) (*Browser, error) {
+func LaunchWithContext(ctx context.Context, opts *klauncher.Options) (*Browser, error) {
 	var log *logger.Logger = logger.New("browser")
 
 	// Launch browser process
 	log.Debug("launching browser process")
-	var process *launcher.Browser
+	var process *klauncher.Browser
 	var err error
-	process, err = launcher.Launch(ctx, opts)
+	process, err = klauncher.Launch(ctx, opts)
 	if err != nil {
 		return nil, fmt.Errorf("kexas: failed to launch browser: %w", err)
 	}

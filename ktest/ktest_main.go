@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/jankylewis/kexas"
-	"github.com/jankylewis/kexas/launcher"
+	"github.com/jankylewis/kexas/klauncher"
 )
 
 // Main runs all test methods in the given suite without requiring the testing package.
@@ -108,7 +108,7 @@ func setupTestEnvironment(t KTestT, config *Config) (*kexas.Browser, *kexas.Page
 	}
 
 	t.Log("ktest: launching browser")
-	var opts *launcher.Options = launcher.DefaultOptions()
+	var opts *klauncher.Options = klauncher.DefaultOptions()
 	opts.Headless = config.Headless
 	if config.BrowserExecutable != "" {
 		opts.ExecutablePath = config.BrowserExecutable

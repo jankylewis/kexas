@@ -1,5 +1,5 @@
 
-package launcher_test
+package klauncher_test
 
 import (
 	"context"
@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jankylewis/kexas/launcher"
+	"github.com/jankylewis/kexas/klauncher"
 )
 
 func TestDefaultOptions(t *testing.T) {
-	var opts *launcher.Options = launcher.DefaultOptions()
+	var opts *klauncher.Options = klauncher.DefaultOptions()
 
 	if !opts.Headless {
 		t.Error("expected headless to be true by default")
@@ -26,7 +26,7 @@ func TestDefaultOptions(t *testing.T) {
 }
 
 func TestOptions_CustomValues(t *testing.T) {
-	var opts *launcher.Options = &launcher.Options{
+	var opts *klauncher.Options = &klauncher.Options{
 		Headless: false,
 		Port:     9333,
 		Args:     []string{"--disable-gpu"},
@@ -45,15 +45,15 @@ func TestOptions_CustomValues(t *testing.T) {
 
 func TestFindChromium_NotFound(t *testing.T) {
 	var ctx context.Context = context.Background()
-	var opts *launcher.Options = &launcher.Options{
+	var opts *klauncher.Options = &klauncher.Options{
 		Headless:       true,
 		Port:           9222,
 		ExecutablePath: "/nonexistent/path/to/chrome",
 	}
 
-	var browser *launcher.Browser
+	var browser *klauncher.Browser
 	var err error
-	browser, err = launcher.Launch(ctx, opts)
+	browser, err = klauncher.Launch(ctx, opts)
 	if err == nil {
 		t.Error("expected error when launching with invalid executable path")
 		if browser != nil {
@@ -63,7 +63,7 @@ func TestFindChromium_NotFound(t *testing.T) {
 }
 
 func TestBuildArgs_Headless(t *testing.T) {
-	var opts *launcher.Options = launcher.DefaultOptions()
+	var opts *klauncher.Options = klauncher.DefaultOptions()
 	opts.Headless = true
 
 	if !opts.Headless {
@@ -72,7 +72,7 @@ func TestBuildArgs_Headless(t *testing.T) {
 }
 
 func TestBuildArgs_CustomArgs(t *testing.T) {
-	var opts *launcher.Options = launcher.DefaultOptions()
+	var opts *klauncher.Options = klauncher.DefaultOptions()
 	opts.Args = []string{"--window-size=1920,1080", "--disable-gpu"}
 
 	if len(opts.Args) != 2 {

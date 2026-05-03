@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/jankylewis/kexas"
-	"github.com/jankylewis/kexas/launcher"
+	"github.com/jankylewis/kexas/klauncher"
 )
 
 // launchTestBrowser launches a headless browser and returns the browser and first page.
@@ -16,7 +16,7 @@ import (
 func launchTestBrowser(t *testing.T) (*kexas.Browser, *kexas.Page) {
 	t.Helper()
 
-	var opts *launcher.Options = launcher.DefaultOptions()
+	var opts *klauncher.Options = klauncher.DefaultOptions()
 	opts.Headless = true
 
 	var browser *kexas.Browser

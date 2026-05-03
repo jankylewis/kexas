@@ -8,33 +8,49 @@ import (
 	"github.com/jankylewis/kexas/errors"
 )
 
-// EnsureAgent ensures an agent is enabled and returns its context
-// This is the core smart enablement logic like Playwright
+// EnsureAgent ensures an agent is enabled and returns its context. Core
+// smart-enablement logic, mirrors Playwright's lazy-enable pattern.
 func (am *AgentManager) EnsureAgent(agentName string) error {
 	am.mutex.Lock()
 	defer am.mutex.Unlock()
-
-	// Check if agent is already enabled
 	if am.enabledAgents.IsEnabled(agentName) {
-		// Update last used time
-		var state *AgentState = am.agentState.GetState(agentName)
-		if state != nil {
-			state.LastUsed = time.Now()
-		}
+		am.touchAgentLastUsed(agentName)
 		return nil
 	}
-
-	// Enable the agent
 	if am.config.Debug {
 		am.log.Debug("enabling agent", "name", agentName)
 	}
+	var err error = am.sendEnableCommand(agentName)
+	if err != nil {
+		return err
+	}
+	am.markAgentEnabled(agentName)
+	var initErr error = am.initAgentContext(agentName)
+	if initErr != nil {
+		return errors.AgentEnableFailed(agentName, initErr)
+	}
+	if am.config.Debug {
+		am.log.Info("agent enabled", "name", agentName)
+	}
+	return nil
+}
 
+// touchAgentLastUsed bumps the agent's last-used timestamp. Used for the
+// already-enabled fast path.
+func (am *AgentManager) touchAgentLastUsed(agentName string) {
+	var state *AgentState = am.agentState.GetState(agentName)
+	if state != nil {
+		state.LastUsed = time.Now()
+	}
+}
+
+// sendEnableCommand fires the CDP `<Agent>.enable` command on the page session.
+// Records the failure on the agent state and returns the wrapped error.
+func (am *AgentManager) sendEnableCommand(agentName string) error {
 	var ctx context.Context
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithTimeout(context.Background(), am.config.EnableTimeout)
 	defer cancel()
-
-	// Send enable command to the page session (not browser target)
 	var _, err = am.cdp.SendToSession(ctx, am.sessionID, agentName+".enable", nil)
 	if err != nil {
 		var state *AgentState = am.agentState.GetState(agentName)
@@ -43,29 +59,19 @@ func (am *AgentManager) EnsureAgent(agentName string) error {
 		}
 		return errors.AgentEnableFailed(agentName, err)
 	}
+	return nil
+}
 
-	// Mark agent as enabled
+// markAgentEnabled flips the enabled bit + state record after a successful
+// CDP enable command.
+func (am *AgentManager) markAgentEnabled(agentName string) {
 	am.enabledAgents.Enable(agentName)
-
-	// Update agent state
 	var state *AgentState = am.agentState.GetState(agentName)
 	if state != nil {
 		state.Enabled = true
 		state.LastUsed = time.Now()
 		state.Error = nil
 	}
-
-	// Initialize agent-specific context
-	var initErr error = am.initAgentContext(agentName)
-	if initErr != nil {
-		return errors.AgentEnableFailed(agentName, initErr)
-	}
-
-	if am.config.Debug {
-		am.log.Info("agent enabled", "name", agentName)
-	}
-
-	return nil
 }
 
 // EnsureAgents enables multiple agents efficiently

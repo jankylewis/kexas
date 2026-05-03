@@ -1,6 +1,6 @@
 # Launcher Module — Detailed Walkthrough
 
-This document dissects every exported/public-facing type and helper inside `kexas/launcher`. For each function we capture:
+This document dissects every exported/public-facing type and helper inside `kexas/klauncher`. For each function we capture:
 - **Purpose** — why it exists.
 - **Inputs** — parameters and expectations.
 - **Outputs** — return values and error conditions.
@@ -154,7 +154,7 @@ Browser.Close()
 
 ---
 ## Testing References
-`kexas/launcher/launcher_test.go` covers:
+`kexas/klauncher/launcher_test.go` covers:
 - `TestBuildArgs_UniqueProfileDirs_Concurrent`
 - `TestCleanStaleTempProfiles_DeletesActiveWorkerDir`
 - `TestCleanOnce_RunsExactlyOnce`

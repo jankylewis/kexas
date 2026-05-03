@@ -26,6 +26,7 @@ const (
 const (
 	CmdRuntimeEvaluate       = "Runtime.evaluate"
 	CmdRuntimeCallFunctionOn = "Runtime.callFunctionOn"
+	CmdRuntimeGetProperties  = "Runtime.getProperties"
 )
 
 // Input Command Constants
@@ -101,6 +102,7 @@ var (
 	RuntimeCommands = []string{
 		CmdRuntimeEvaluate,
 		CmdRuntimeCallFunctionOn,
+		CmdRuntimeGetProperties,
 	}
 
 	// Network Commands - Cookie and network management

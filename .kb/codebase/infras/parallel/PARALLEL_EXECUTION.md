@@ -241,4 +241,4 @@ This ensures critical tests start first and get results earliest.
 
 ---
 
-**Files**: `ktest/ktest_parallel.go`, `ktest/ktest_types.go`, `ktest/ktest_groups.go`, `ktest/ktest_runner.go`, `launcher/launcher.go`
+**Files**: `ktest/ktest_parallel.go`, `ktest/ktest_types.go`, `ktest/ktest_groups.go`, `ktest/ktest_runner.go`, `klauncher/launcher.go`

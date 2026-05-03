@@ -1,4 +1,4 @@
-package launcher
+package klauncher
 
 import (
 	"encoding/json"

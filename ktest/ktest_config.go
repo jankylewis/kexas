@@ -142,6 +142,13 @@ func anchorOne(baseDir, dir string) string {
 // applyJSONConfig overlays each non-nil field from jsonConfig onto config.
 // Only fields explicitly present in the JSON file override the defaults.
 func applyJSONConfig(config *Config, jsonConfig *configJSON) {
+	applyExecutionFlagsFromJSON(config, jsonConfig)
+	applyArtifactPathsFromJSON(config, jsonConfig)
+	applyBrowserOptionsFromJSON(config, jsonConfig)
+}
+
+// applyExecutionFlagsFromJSON copies headless/timeout/retries/parallel.
+func applyExecutionFlagsFromJSON(config *Config, jsonConfig *configJSON) {
 	if jsonConfig.Headless != nil {
 		config.Headless = *jsonConfig.Headless
 	}
@@ -160,6 +167,13 @@ func applyJSONConfig(config *Config, jsonConfig *configJSON) {
 			config.Parallel = true
 		}
 	}
+	if jsonConfig.SlowMo != nil {
+		config.SlowMo = time.Duration(*jsonConfig.SlowMo) * time.Millisecond
+	}
+}
+
+// applyArtifactPathsFromJSON copies screenshot/video/report dir overrides.
+func applyArtifactPathsFromJSON(config *Config, jsonConfig *configJSON) {
 	if jsonConfig.ScreenshotOnFail != nil {
 		config.ScreenshotOnFail = *jsonConfig.ScreenshotOnFail
 	}
@@ -172,9 +186,10 @@ func applyJSONConfig(config *Config, jsonConfig *configJSON) {
 	if jsonConfig.ReportDir != nil {
 		config.ReportDir = *jsonConfig.ReportDir
 	}
-	if jsonConfig.SlowMo != nil {
-		config.SlowMo = time.Duration(*jsonConfig.SlowMo) * time.Millisecond
-	}
+}
+
+// applyBrowserOptionsFromJSON copies baseURL / executable / viewport overrides.
+func applyBrowserOptionsFromJSON(config *Config, jsonConfig *configJSON) {
 	if jsonConfig.BaseURL != nil {
 		config.BaseURL = *jsonConfig.BaseURL
 	}

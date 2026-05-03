@@ -1,6 +1,6 @@
 # Launcher (High-Level)
 
-Source: `kexas/launcher/launcher.go`
+Source: `kexas/klauncher/launcher.go`
 
 ## Mission
 

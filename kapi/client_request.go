@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"strings"
 	"time"
@@ -98,6 +100,51 @@ func (rb *RequestBuilder) BodyForm(data map[string]string) *RequestBuilder {
 	}
 	rb.body = strings.NewReader(formValues.Encode())
 	rb.contentType = "application/x-www-form-urlencoded"
+	return rb
+}
+
+// MultipartFile carries one file attachment for BodyMultipart. Use a
+// non-empty Filename so the server sees the original name; ContentType is
+// optional (defaults to application/octet-stream).
+type MultipartFile struct {
+	FieldName   string
+	Filename    string
+	Content     []byte
+	ContentType string
+}
+
+// BodyMultipart sets the request body as multipart/form-data — the encoding
+// browsers use for `<form enctype="multipart/form-data">` submissions and the
+// canonical way to upload files via HTTP. fields is the text form parts;
+// files is the file attachments.
+//
+// Mirrors RestSharp's `AddFile` / RestAssured's `multiPart()` / Axios's
+// FormData. Sets Content-Type with the negotiated boundary automatically.
+func (rb *RequestBuilder) BodyMultipart(fields map[string]string, files []MultipartFile) *RequestBuilder {
+	var buf bytes.Buffer
+	var writer *multipart.Writer = multipart.NewWriter(&buf)
+	for k, v := range fields {
+		_ = writer.WriteField(k, v)
+	}
+	for _, f := range files {
+		var hdr textproto.MIMEHeader = make(textproto.MIMEHeader)
+		hdr.Set("Content-Disposition", fmt.Sprintf(`form-data; name=%q; filename=%q`, f.FieldName, f.Filename))
+		var contentType string = f.ContentType
+		if contentType == "" {
+			contentType = "application/octet-stream"
+		}
+		hdr.Set("Content-Type", contentType)
+		var part io.Writer
+		var err error
+		part, err = writer.CreatePart(hdr)
+		if err != nil {
+			continue
+		}
+		_, _ = part.Write(f.Content)
+	}
+	_ = writer.Close()
+	rb.body = bytes.NewReader(buf.Bytes())
+	rb.contentType = writer.FormDataContentType()
 	return rb
 }
 

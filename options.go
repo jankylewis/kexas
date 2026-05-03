@@ -1,11 +1,11 @@
 package kexas
 
-import "github.com/jankylewis/kexas/launcher"
+import "github.com/jankylewis/kexas/klauncher"
 
 // LaunchOptions configures browser launch behavior.
-type LaunchOptions = launcher.Options
+type LaunchOptions = klauncher.Options
 
 // DefaultLaunchOptions returns sensible default launch options.
 func DefaultLaunchOptions() *LaunchOptions {
-	return launcher.DefaultOptions()
+	return klauncher.DefaultOptions()
 }

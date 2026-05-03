@@ -33,49 +33,62 @@ func (r *Recorder) SaveAnimatedGIF(outputPath string) (string, error) {
 	var framesCopy []Frame = make([]Frame, len(r.frames))
 	copy(framesCopy, r.frames)
 	r.mu.Unlock()
-
 	if len(framesCopy) == 0 {
 		return "", fmt.Errorf("no frames to save as animated gif")
 	}
+	var g *gif.GIF
+	var err error
+	g, err = framesToGIF(framesCopy)
+	if err != nil {
+		return "", err
+	}
+	var gifPath string = swapExtensionToGIF(outputPath)
+	err = writeGIFToPath(g, gifPath)
+	if err != nil {
+		return "", err
+	}
+	r.log.Info("animated gif saved", "path", gifPath, "frames", len(framesCopy), "delay", 10)
+	return gifPath, nil
+}
 
+// framesToGIF decodes each frame and assembles a *gif.GIF with uniform 10fps
+// timing (matches the ffmpeg path's --framerate 10).
+func framesToGIF(framesCopy []Frame) (*gif.GIF, error) {
 	var g *gif.GIF = &gif.GIF{
 		Image: make([]*image.Paletted, 0, len(framesCopy)),
 		Delay: make([]int, 0, len(framesCopy)),
 	}
-
-	// 10fps matches the ffmpeg path (`-framerate 10`); 100ms / frame = 10 hundredths.
 	const delayHundredths int = 10
 	for i, frame := range framesCopy {
 		var paletted *image.Paletted
 		var convErr error
 		paletted, convErr = decodeAndPaletteFrame(frame.Data)
 		if convErr != nil {
-			return "", fmt.Errorf("frame %d encode: %w", i, convErr)
+			return nil, fmt.Errorf("frame %d encode: %w", i, convErr)
 		}
 		g.Image = append(g.Image, paletted)
 		g.Delay = append(g.Delay, delayHundredths)
 	}
+	return g, nil
+}
 
-	var gifPath string = swapExtensionToGIF(outputPath)
+// writeGIFToPath ensures the output directory exists and writes g to it.
+func writeGIFToPath(g *gif.GIF, gifPath string) error {
 	var err error = os.MkdirAll(filepath.Dir(gifPath), 0755)
 	if err != nil {
-		return "", fmt.Errorf("failed to create gif output dir: %w", err)
+		return fmt.Errorf("failed to create gif output dir: %w", err)
 	}
-
 	var f *os.File
 	f, err = os.Create(gifPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to create gif file: %w", err)
+		return fmt.Errorf("failed to create gif file: %w", err)
 	}
 	defer f.Close()
-
 	err = gif.EncodeAll(f, g)
 	if err != nil {
-		return "", fmt.Errorf("gif.EncodeAll: %w", err)
+		return fmt.Errorf("gif.EncodeAll: %w", err)
 	}
-
-	r.log.Info("animated gif saved", "path", gifPath, "frames", len(framesCopy), "delay", delayHundredths)
-	return gifPath, nil
+	return nil
 }
 
 // decodeAndPaletteFrame decodes a JPEG/PNG byte slice and quantises it to a

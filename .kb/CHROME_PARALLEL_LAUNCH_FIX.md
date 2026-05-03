@@ -168,9 +168,9 @@ Each launch creates a user data dir with a crypto-random 16-char hex suffix
 
 | File | Change |
 |------|--------|
-| `launcher/launcher.go` | Port=0 self-assign, pipe-based stderr, extractPortFromWSURL |
-| `launcher/launcher_cleanup.go` | Extracted cleanup/port utilities (500-line limit) |
-| `launcher/launcher_parallel_test.go` | 12 critical tests for pipe extraction, port parsing, TOCTOU |
+| `klauncher/launcher.go` | Port=0 self-assign, pipe-based stderr, extractPortFromWSURL |
+| `klauncher/launcher_cleanup.go` | Extracted cleanup/port utilities (500-line limit) |
+| `klauncher/launcher_parallel_test.go` | 12 critical tests for pipe extraction, port parsing, TOCTOU |
 | `ktest/ktest_parallel.go` | Retry with backoff, stagger delay |
 
 ## Test Results

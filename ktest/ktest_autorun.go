@@ -6,7 +6,7 @@ import (
 	"reflect"
 
 	"github.com/jankylewis/kexas"
-	"github.com/jankylewis/kexas/launcher"
+	"github.com/jankylewis/kexas/klauncher"
 )
 
 // AutoRun automatically discovers and runs Test* functions in the current package
@@ -53,7 +53,7 @@ func runDiscoveredTests() {
 	var t *ktestT = newKTestT()
 	t.Log("ktest: launching browser")
 	var browser *kexas.Browser
-	browser, err = kexas.Launch(launcher.DefaultOptions())
+	browser, err = kexas.Launch(klauncher.DefaultOptions())
 	if err != nil {
 		t.Fatalf("ktest: failed to launch browser: %v", err)
 	}

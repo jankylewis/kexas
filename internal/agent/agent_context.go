@@ -63,52 +63,39 @@ type ProfilerContext struct {
 	ProfileID string `json:"profileId"`
 }
 
-// GetContext returns the context for a specific agent
+// GetContext returns the context for a specific agent. nilOrTyped folds the
+// nil-check + typed-return into a single helper so the dispatch is tiny.
 func (ac AgentContext) GetContext(agentName string) interface{} {
 	switch agentName {
 	case AgentDOM:
-		if ac.DOM == nil {
-			return nil
-		}
-		return ac.DOM
+		return nilOrTyped(ac.DOM)
 	case AgentInput:
-		if ac.Input == nil {
-			return nil
-		}
-		return ac.Input
+		return nilOrTyped(ac.Input)
 	case AgentRuntime:
-		if ac.Runtime == nil {
-			return nil
-		}
-		return ac.Runtime
+		return nilOrTyped(ac.Runtime)
 	case AgentNetwork:
-		if ac.Network == nil {
-			return nil
-		}
-		return ac.Network
+		return nilOrTyped(ac.Network)
 	case AgentPage:
-		if ac.Page == nil {
-			return nil
-		}
-		return ac.Page
+		return nilOrTyped(ac.Page)
 	case AgentSecurity:
-		if ac.Security == nil {
-			return nil
-		}
-		return ac.Security
+		return nilOrTyped(ac.Security)
 	case AgentDebugger:
-		if ac.Debugger == nil {
-			return nil
-		}
-		return ac.Debugger
+		return nilOrTyped(ac.Debugger)
 	case AgentProfiler:
-		if ac.Profiler == nil {
-			return nil
-		}
-		return ac.Profiler
+		return nilOrTyped(ac.Profiler)
 	default:
 		return nil
 	}
+}
+
+// nilOrTyped returns nil when v's underlying pointer is nil; otherwise the
+// typed pointer wrapped in interface{}. Avoids the typed-nil-as-non-nil
+// interface gotcha that returning v directly would cause.
+func nilOrTyped[T any](v *T) interface{} {
+	if v == nil {
+		return nil
+	}
+	return v
 }
 
 // SetContext sets the context for a specific agent. Silently drops a context whose

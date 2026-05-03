@@ -74,14 +74,33 @@ func (p *Page) SetCookie(cookie Cookie) error {
 	if cookie.Name == "" {
 		return errors.ErrCookieNameEmpty
 	}
-
 	p.log.Debug("setting cookie", "name", cookie.Name)
+	var params map[string]interface{} = buildSetCookieParams(cookie)
+	var result map[string]interface{}
+	var err error
+	result, err = p.sendCommand(cdp.CmdNetworkSetCookie, params)
+	if err != nil {
+		p.log.Error("failed to set cookie", "name", cookie.Name, "error", err)
+		return fmt.Errorf("set cookie failed for '%s': %w", cookie.Name, err)
+	}
+	var success bool
+	var ok bool
+	success, ok = result["success"].(bool)
+	if ok && !success {
+		return fmt.Errorf("set cookie '%s': %w", cookie.Name, errors.ErrCookieSetFailed)
+	}
+	p.log.Info("cookie set", "name", cookie.Name)
+	return nil
+}
 
+// buildSetCookieParams converts a Cookie struct into the CDP Network.setCookie
+// params map, omitting empty/zero/false fields so CDP gets only what the
+// caller intended.
+func buildSetCookieParams(cookie Cookie) map[string]interface{} {
 	var params map[string]interface{} = map[string]interface{}{
 		"name":  cookie.Name,
 		"value": cookie.Value,
 	}
-
 	if cookie.Domain != "" {
 		params["domain"] = cookie.Domain
 	}
@@ -100,25 +119,7 @@ func (p *Page) SetCookie(cookie Cookie) error {
 	if cookie.SameSite != "" {
 		params["sameSite"] = cookie.SameSite
 	}
-
-	var result map[string]interface{}
-	var err error
-	result, err = p.sendCommand(cdp.CmdNetworkSetCookie, params)
-	if err != nil {
-		p.log.Error("failed to set cookie", "name", cookie.Name, "error", err)
-		return fmt.Errorf("set cookie failed for '%s': %w", cookie.Name, err)
-	}
-
-	// Check if Chrome confirmed the cookie was set
-	var success bool
-	var ok bool
-	success, ok = result["success"].(bool)
-	if ok && !success {
-		return fmt.Errorf("set cookie '%s': %w", cookie.Name, errors.ErrCookieSetFailed)
-	}
-
-	p.log.Info("cookie set", "name", cookie.Name)
-	return nil
+	return params
 }
 
 // SetCookies sets multiple cookies on the page.

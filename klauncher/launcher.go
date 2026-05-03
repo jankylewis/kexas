@@ -3,7 +3,7 @@
 // It locates the Chromium binary on the system, starts it with the appropriate
 // command-line flags for automation (headless mode, remote debugging port, etc.),
 // and extracts the WebSocket debugger URL for CDP communication.
-package launcher
+package klauncher
 
 import (
 	"context"

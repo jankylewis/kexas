@@ -18,7 +18,7 @@ This is a **macOS-specific** issue related to Crashpad (Chrome's crash reporter)
 
 ---
 
-## Prevention Mechanisms (launcher.go)
+## Prevention Mechanisms (klauncher/launcher.go)
 
 ### 1. Kill by Port (lsof)
 
@@ -113,7 +113,7 @@ Forces Chrome to use `/tmp` instead of `/dev/shm` for shared memory, avoiding co
 
 ## Unit Tests
 
-Critical unit tests in `launcher/launcher_test.go`:
+Critical unit tests in `klauncher/launcher_test.go`:
 
 - `TestCleanStaleTempProfiles_RemovesKexasProfiles` — verifies stale profile cleanup
 - `TestCleanStaleTempProfiles_Idempotent` — verifies double-cleanup safety
@@ -127,5 +127,5 @@ Critical unit tests in `launcher/launcher_test.go`:
 
 ## File Reference
 
-- **`launcher/launcher.go`** — `killExistingChromeProcesses()`, `cleanStaleTempProfiles()`, `buildArgs()`, `Launch()`
-- **`launcher/launcher_test.go`** — All crash prevention unit tests
+- **`klauncher/launcher.go`** — `killExistingChromeProcesses()`, `cleanStaleTempProfiles()`, `buildArgs()`, `Launch()`
+- **`klauncher/launcher_test.go`** — All crash prevention unit tests

@@ -1,4 +1,4 @@
-package launcher
+package klauncher
 
 import (
 	"context"
@@ -15,9 +15,7 @@ func Launch(ctx context.Context, opts *Options) (*Browser, error) {
 	if opts == nil {
 		opts = DefaultOptions()
 	}
-
 	var log *logger.Logger = logger.New("launcher")
-
 	var execPath string
 	var err error
 	execPath, err = resolveChromiumPath(opts, log)
@@ -26,43 +24,39 @@ func Launch(ctx context.Context, opts *Options) (*Browser, error) {
 	}
 	log.Debug("found chromium", "path", execPath)
 	logPortStrategy(opts, log)
+	return launchChromiumProcess(ctx, opts, execPath, log)
+}
 
+// launchChromiumProcess wires the prepared command + port-bind + URL-capture
+// + Browser-construction phases. Each cancel-on-failure path is guarded.
+func launchChromiumProcess(ctx context.Context, opts *Options, execPath string, log *logger.Logger) (*Browser, error) {
 	var cmd *exec.Cmd
 	var userDataDir string
 	var stderrPipe io.ReadCloser
 	var cancel context.CancelFunc
+	var err error
 	cmd, userDataDir, stderrPipe, cancel, err = prepareLaunchProcess(ctx, opts, execPath)
 	if err != nil {
 		return nil, err
 	}
-
 	log.Info("launching chromium", "headless", opts.Headless, "port", opts.Port)
 	cleanOnce.Do(func() { cleanStaleTempProfiles(log) })
-
 	err = ensurePortAvailable(opts.Port, log)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
-
 	var wsURL string
 	wsURL, err = startProcessAndCaptureURL(cmd, stderrPipe, opts.Port, log)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
-
 	var actualPort int = resolveActualPort(opts.Port, wsURL, log)
 	log.Info("chromium launched successfully", "wsURL", wsURL)
-
 	return &Browser{
-		cmd:         cmd,
-		wsURL:       wsURL,
-		log:         log,
-		cancelFunc:  cancel,
-		userDataDir: userDataDir,
-		logFile:     "", // No log file — using pipe-based stderr capture
-		port:        actualPort,
+		cmd: cmd, wsURL: wsURL, log: log, cancelFunc: cancel,
+		userDataDir: userDataDir, logFile: "", port: actualPort,
 	}, nil
 }
 

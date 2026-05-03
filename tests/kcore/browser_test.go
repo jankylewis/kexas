@@ -6,14 +6,14 @@ import (
 	"testing"
 
 	"github.com/jankylewis/kexas"
-	"github.com/jankylewis/kexas/launcher"
+	"github.com/jankylewis/kexas/klauncher"
 )
 
 func TestLaunch_WithDefaultOptions(t *testing.T) {
 	// This would actually launch a browser
 	t.Skip("requires real browser - integration test")
 
-	var opts *launcher.Options = launcher.DefaultOptions()
+	var opts *klauncher.Options = klauncher.DefaultOptions()
 	var browser *kexas.Browser
 	var err error
 	browser, err = kexas.Launch(opts)

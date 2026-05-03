@@ -2,7 +2,7 @@
 
 ## How to Specify Chrome Version
 
-Kexas downloads Chrome for Testing from Google's official CDN. You can control which version gets downloaded by changing the `ChromeReleaseChannel` constant in `launcher/downloader.go`.
+Kexas downloads Chrome for Testing from Google's official CDN. You can control which version gets downloaded by changing the `ChromeReleaseChannel` constant in `klauncher/downloader.go`.
 
 ## Available Channels
 
@@ -46,7 +46,7 @@ const ChromeReleaseChannel string = "Canary"
 
 ## How to Change Channel
 
-**Step 1:** Edit `launcher/downloader.go`
+**Step 1:** Edit `klauncher/downloader.go`
 
 ```go
 // Change this line:

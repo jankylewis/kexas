@@ -63,7 +63,7 @@ Total: ~2.5 sessions of focused work.
 Not blocking. Should land after:
 
 - The `kcore/` structural refactor (current focus).
-- The 230-line / 50-line compliance pass on existing source.
+- The 230-line / 40-line compliance pass on existing source.
 
 Reasons: (a) the kcore/ move shifts file paths the report's screenshot-handling references, so doing report work after that move is cleaner; (b) recorder.go is one of the files being moved, so changes during the kcore refactor and changes here are best done sequentially, not concurrently.
 
@@ -106,7 +106,7 @@ Reasons: (a) the kcore/ move shifts file paths the report's screenshot-handling 
 ### What's needed
 
 - The launcher already supports `mac-arm64`, `mac-x64`, `linux64`, `win64`, `win32` for downloading Chrome for Testing — the binary-download path is portable.
-- The `findChromium` system-fallback paths in `launcher/launcher.go` only cover macOS today. Need to add Linux paths (`/usr/bin/google-chrome`, `/usr/bin/chromium`, etc.) and Windows paths (`C:\Program Files\Google\Chrome\Application\chrome.exe`).
+- The `findChromium` system-fallback paths in `klauncher/launcher.go` only cover macOS today. Need to add Linux paths (`/usr/bin/google-chrome`, `/usr/bin/chromium`, etc.) and Windows paths (`C:\Program Files\Google\Chrome\Application\chrome.exe`).
 - The `killExistingChromeProcesses` helper in `launcher_cleanup.go` uses `lsof` and `pgrep` — both Unix-only. Windows would need `tasklist` / `taskkill`. Linux already supports `lsof`/`pgrep`.
 - CI matrix for cross-platform testing.
 

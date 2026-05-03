@@ -146,7 +146,7 @@ result, err := client.Send(ctx, "Page.navigate", map[string]interface{}{
 
 ---
 
-## 4. Launcher (`internal/launcher/launcher.go`)
+## 4. Launcher (`internal/klauncher/launcher.go`)
 
 **Purpose**: Find, download, and launch Chromium browser process.
 

@@ -327,7 +327,7 @@ func TestPage_QuerySelector_Success(t *testing.T) {
 
 ### Refactoring Large Files
 
-If file exceeds 500 lines, split it:
+If file exceeds 230 lines (Rule 01), split it:
 
 **Before**:
 ```

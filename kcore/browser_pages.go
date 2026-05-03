@@ -80,58 +80,77 @@ func (b *Browser) FirstPage() (*Page, error) {
 // Returns (page, nil) on success; (nil, error) on transient or hard failures.
 func (b *Browser) firstPageAttempt() (*Page, error) {
 	b.log.Debug("getting first page")
+	var targetInfos []interface{}
+	var err error
+	targetInfos, err = b.fetchTargetInfos()
+	if err != nil {
+		return nil, err
+	}
+	for _, targetInfoRaw := range targetInfos {
+		var targetID string
+		var ok bool
+		targetID, ok = extractPageTargetID(targetInfoRaw)
+		if !ok {
+			continue
+		}
+		b.log.Debug("found first page", "targetId", targetID)
+		return b.attachAndRegisterPage(targetID)
+	}
+	return nil, fmt.Errorf("no page targets in this poll")
+}
 
-	var params map[string]interface{} = map[string]interface{}{}
+// fetchTargetInfos calls Target.getTargets and returns the raw targetInfos
+// list. Wraps both transport and shape errors.
+func (b *Browser) fetchTargetInfos() ([]interface{}, error) {
 	var result map[string]interface{}
 	var err error
-	result, err = b.client.Send(b.ctx, "Target.getTargets", params)
+	result, err = b.client.Send(b.ctx, "Target.getTargets", map[string]interface{}{})
 	if err != nil {
 		return nil, fmt.Errorf("kexas: failed to get targets: %w", err)
 	}
-
 	var targetInfos []interface{}
 	var ok bool
 	targetInfos, ok = result["targetInfos"].([]interface{})
 	if !ok {
 		return nil, fmt.Errorf("kexas: invalid targetInfos in response")
 	}
+	return targetInfos, nil
+}
 
-	for _, targetInfoRaw := range targetInfos {
-		var targetInfo map[string]interface{}
-		targetInfo, ok = targetInfoRaw.(map[string]interface{})
-		if !ok {
-			continue
-		}
-
-		var targetType string
-		targetType, ok = targetInfo["type"].(string)
-		if !ok || targetType != "page" {
-			continue
-		}
-
-		var targetID string
-		targetID, ok = targetInfo["targetId"].(string)
-		if !ok {
-			continue
-		}
-
-		b.log.Debug("found first page", "targetId", targetID)
-
-		var page *Page
-		var attachErr error
-		page, attachErr = b.attachToPage(targetID)
-		if attachErr != nil {
-			return nil, attachErr
-		}
-
-		b.pagesMu.Lock()
-		b.pages = append(b.pages, page)
-		b.pagesMu.Unlock()
-
-		return page, nil
+// extractPageTargetID returns (targetId, true) only when targetInfoRaw is a
+// page target with a string targetId. Filters non-page targets (workers,
+// service workers, etc.) and shape mismatches.
+func extractPageTargetID(targetInfoRaw interface{}) (string, bool) {
+	targetInfo, ok := targetInfoRaw.(map[string]interface{})
+	if !ok {
+		return "", false
 	}
+	var targetType string
+	targetType, ok = targetInfo["type"].(string)
+	if !ok || targetType != "page" {
+		return "", false
+	}
+	var targetID string
+	targetID, ok = targetInfo["targetId"].(string)
+	if !ok {
+		return "", false
+	}
+	return targetID, true
+}
 
-	return nil, fmt.Errorf("no page targets in this poll")
+// attachAndRegisterPage attaches to a page target and adds the resulting Page
+// to the browser's tracked-pages list under the mutex.
+func (b *Browser) attachAndRegisterPage(targetID string) (*Page, error) {
+	var page *Page
+	var err error
+	page, err = b.attachToPage(targetID)
+	if err != nil {
+		return nil, err
+	}
+	b.pagesMu.Lock()
+	b.pages = append(b.pages, page)
+	b.pagesMu.Unlock()
+	return page, nil
 }
 
 // attachToPage attaches to a page target and returns a Page object.

@@ -9,6 +9,9 @@ import (
 
 // URL returns the current URL of the page.
 func (p *Page) URL() (string, error) {
+	if p == nil {
+		return "", fmt.Errorf("kexas: URL called on nil page")
+	}
 	var result map[string]interface{}
 	var err error
 	result, err = p.sendCommand(cdp.CmdRuntimeEvaluate, map[string]interface{}{
@@ -64,6 +67,9 @@ func (p *Page) Screenshot() ([]byte, error) {
 
 // Title returns the title of the current page.
 func (p *Page) Title() (string, error) {
+	if p == nil {
+		return "", fmt.Errorf("kexas: Title called on nil page")
+	}
 	var result map[string]interface{}
 	var err error
 	result, err = p.sendCommand(cdp.CmdRuntimeEvaluate, map[string]interface{}{
@@ -86,7 +92,9 @@ func (p *Page) Title() (string, error) {
 // SetContent sets the HTML content of the page using CDP Page.setDocumentContent.
 // This is useful for testing without requiring navigation.
 func (p *Page) SetContent(html string) error {
-	// Get the frame ID from the page's target
+	if p == nil {
+		return fmt.Errorf("kexas: SetContent called on nil page")
+	}
 	var frameResult map[string]interface{}
 	var err error
 	frameResult, err = p.sendCommand(cdp.CmdPageGetFrameTree, nil)
@@ -126,6 +134,9 @@ func (p *Page) SetContent(html string) error {
 
 // Evaluate executes a JavaScript expression and returns the result as an interface{}.
 func (p *Page) Evaluate(expression string) (interface{}, error) {
+	if p == nil {
+		return nil, fmt.Errorf("kexas: Evaluate called on nil page")
+	}
 	var result map[string]interface{}
 	var err error
 	result, err = p.sendCommand(cdp.CmdRuntimeEvaluate, map[string]interface{}{

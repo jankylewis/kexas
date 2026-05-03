@@ -67,7 +67,7 @@ ls -la ~/.kexas/browsers/chromium-1140/
 rm -rf ~/.kexas/browsers/chromium-1140/
 
 # Temporarily break download URL (for testing)
-# Edit launcher/downloader.go, change build number to invalid value
+# Edit klauncher/downloader.go, change build number to invalid value
 
 # Run test - should fall back to system Chrome
 go test -v -run TestGoogle ./tests

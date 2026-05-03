@@ -118,5 +118,8 @@ func extractMatchCount(result map[string]interface{}) int {
 // This method searches for elements using XPath expressions.
 // Use this for complex selections that CSS selectors cannot handle.
 func (p *Page) FindByXPath(xpath string) (*Element, error) {
+	if p == nil {
+		return nil, errors.ElementNotFound(xpath)
+	}
 	return p.findByXPath(xpath)
 }

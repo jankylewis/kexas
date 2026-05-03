@@ -101,66 +101,68 @@ func UntilReady[T any](ctx context.Context, fn func() (T, error), opts *Options)
 }
 
 // ForPageLoad waits for a page to finish loading based on the wait strategy.
-// getTitleFn should return the current page title.
+// getTitleFn should return the current page title. NB: title-polling is a
+// known fragile signal — see .kb/SAMPLINGS_LONG_FLOWS.md.
 func ForPageLoad(ctx context.Context, getTitleFn func() (string, error), waitUntil WaitUntil, timeout time.Duration) error {
-	var opts *Options = &Options{
+	var opts *Options = newPageLoadOptions(waitUntil, timeout)
+	switch waitUntil {
+	case WaitUntilCommit:
+		return nil
+	case WaitUntilDOMContentLoaded:
+		return For(ctx, titleChangedFromNewTab(getTitleFn), opts)
+	case WaitUntilLoad:
+		return For(ctx, titleStableAndSet(getTitleFn), opts)
+	case WaitUntilNetworkIdle:
+		return waitForNetworkIdleViaTitle(ctx, getTitleFn, opts)
+	default:
+		return fmt.Errorf("kwait: unknown waitUntil value: %s", waitUntil)
+	}
+}
+
+// newPageLoadOptions builds the polling Options used by every wait strategy.
+func newPageLoadOptions(waitUntil WaitUntil, timeout time.Duration) *Options {
+	return &Options{
 		Timeout:  timeout,
 		Interval: 100 * time.Millisecond,
 		Message:  fmt.Sprintf("page did not reach '%s' state", waitUntil),
 	}
+}
 
-	switch waitUntil {
-	case WaitUntilCommit:
-		// Commit happens immediately when navigation starts
-		// No additional waiting needed
-		return nil
-
-	case WaitUntilDOMContentLoaded:
-		// Wait for title to change from "New Tab" (indicates DOM is ready)
-		return For(ctx, func() (bool, error) {
-			var title string
-			var err error
-			title, err = getTitleFn()
-			if err != nil {
-				return false, nil // Ignore errors, keep trying
-			}
-			// DOM is ready when title changes from "New Tab"
-			return title != "New Tab", nil
-		}, opts)
-
-	case WaitUntilLoad:
-		// Wait for title to be set and stable (indicates resources loaded)
-		return For(ctx, func() (bool, error) {
-			var title string
-			var err error
-			title, err = getTitleFn()
-			if err != nil {
-				return false, nil
-			}
-			// Page is fully loaded when title is not empty and not "New Tab"
-			return title != "" && title != "New Tab", nil
-		}, opts)
-
-	case WaitUntilNetworkIdle:
-		// TODO: Implement proper network idle detection via CDP
-		// For now, wait for title + extra time for network to settle
-		var err error = For(ctx, func() (bool, error) {
-			var title string
-			var e error
-			title, e = getTitleFn()
-			if e != nil {
-				return false, nil
-			}
-			return title != "" && title != "New Tab", nil
-		}, opts)
+// titleChangedFromNewTab returns a poll predicate satisfied once the title
+// stops being "New Tab" — DOM-ready proxy.
+func titleChangedFromNewTab(getTitleFn func() (string, error)) func() (bool, error) {
+	return func() (bool, error) {
+		var title string
+		var err error
+		title, err = getTitleFn()
 		if err != nil {
-			return err
+			return false, nil
 		}
-		// Wait additional 500ms for network to be idle
-		time.Sleep(500 * time.Millisecond)
-		return nil
-
-	default:
-		return fmt.Errorf("kwait: unknown waitUntil value: %s", waitUntil)
+		return title != "New Tab", nil
 	}
+}
+
+// titleStableAndSet returns a poll predicate satisfied when the title is both
+// non-empty and not the default "New Tab" — full-load proxy.
+func titleStableAndSet(getTitleFn func() (string, error)) func() (bool, error) {
+	return func() (bool, error) {
+		var title string
+		var err error
+		title, err = getTitleFn()
+		if err != nil {
+			return false, nil
+		}
+		return title != "" && title != "New Tab", nil
+	}
+}
+
+// waitForNetworkIdleViaTitle is the placeholder NetworkIdle strategy: wait for
+// title-load proxy then sleep 500ms. TODO: real CDP Page.lifecycleEvent.
+func waitForNetworkIdleViaTitle(ctx context.Context, getTitleFn func() (string, error), opts *Options) error {
+	var err error = For(ctx, titleStableAndSet(getTitleFn), opts)
+	if err != nil {
+		return err
+	}
+	time.Sleep(500 * time.Millisecond)
+	return nil
 }

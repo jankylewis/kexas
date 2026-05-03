@@ -14,42 +14,46 @@ import (
 // Auto-retries for up to 10 seconds to handle SPA rendering delays.
 // Returns the element when found, or error if not found after timeout.
 func (p *Page) Find(selector string) (*Element, error) {
-	// Handle nil page gracefully for testing
 	if p == nil || p.log == nil {
-		// For testing, just return error immediately
 		return nil, fmt.Errorf("element %s not found", selector)
 	}
-
 	p.log.Debug("finding element", "selector", selector)
-
 	var timeout time.Duration = 7 * time.Second
 	var pollInterval time.Duration = 200 * time.Millisecond
 	var start time.Time = time.Now()
 	var lastErr error
-
 	for time.Since(start) < timeout {
 		var elem *Element
 		var err error
-
-		// Detect selector type and use appropriate method
-		if strings.HasPrefix(selector, "#") {
-			var id string = selector[1:]
-			elem, err = p.findByID(id)
-		} else if strings.HasPrefix(selector, "//") || strings.HasPrefix(selector, "(") {
-			elem, err = p.findByXPath(selector)
-		} else {
-			elem, err = p.findByCSS(selector)
-		}
-
+		elem, err = p.dispatchFind(selector)
 		if err == nil && elem != nil {
 			return elem, nil
 		}
-
 		lastErr = err
 		time.Sleep(pollInterval)
 	}
+	p.logFindTimeout(selector, timeout, time.Since(start))
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, fmt.Errorf("element %s not found after %v", selector, timeout)
+}
 
-	// Log page title for context when element not found
+// dispatchFind routes to the appropriate finder based on selector form.
+// Same dispatch as FindAll: `#x` → ID-shortcut → ID, `//`/`(` → XPath, else CSS.
+func (p *Page) dispatchFind(selector string) (*Element, error) {
+	if strings.HasPrefix(selector, "#") {
+		return p.findByID(selector[1:])
+	}
+	if strings.HasPrefix(selector, "//") || strings.HasPrefix(selector, "(") {
+		return p.findByXPath(selector)
+	}
+	return p.findByCSS(selector)
+}
+
+// logFindTimeout records a timeout-with-pageTitle observation. Title is best-
+// effort; failures are silent because the find error itself is more important.
+func (p *Page) logFindTimeout(selector string, timeout time.Duration, elapsed time.Duration) {
 	var titleResult map[string]interface{}
 	titleResult, _ = p.sendCommand(cdp.CmdRuntimeEvaluate, map[string]interface{}{
 		"expression":    "document.title",
@@ -59,11 +63,7 @@ func (p *Page) Find(selector string) (*Element, error) {
 	if tr, ok2 := titleResult["result"].(map[string]interface{}); ok2 {
 		pageTitle, _ = tr["value"].(string)
 	}
-	p.log.Info("element not found after timeout", "selector", selector, "timeout", timeout, "elapsed", time.Since(start), "pageTitle", pageTitle)
-	if lastErr != nil {
-		return nil, lastErr
-	}
-	return nil, fmt.Errorf("element %s not found after %v", selector, timeout)
+	p.log.Info("element not found after timeout", "selector", selector, "timeout", timeout, "elapsed", elapsed, "pageTitle", pageTitle)
 }
 
 // findByID finds an element by its ID attribute.

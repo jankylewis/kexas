@@ -264,7 +264,7 @@ cleanOnce.Do(func() { cleanStaleTempProfiles(log) })
 - `TestCleanStaleTempProfiles_DeletesActiveWorkerDir` — proves the race
 - `TestCleanOnce_RunsExactlyOnce` — proves sync.Once guard works
 
-**File**: `kexas/launcher/launcher.go` → `Launch()` + `cleanOnce`
+**File**: `kexas/klauncher/launcher.go` → `Launch()` + `cleanOnce`
 
 ---
 
@@ -283,7 +283,7 @@ kexas-chrome-<unixnano>-<16 hex chars>
 **Regression test**: `TestBuildArgs_UniqueProfileDirs_Concurrent` — spawns 50
 concurrent goroutines and asserts zero duplicate dirs.
 
-**File**: `kexas/launcher/launcher.go` → `buildArgs()`
+**File**: `kexas/klauncher/launcher.go` → `buildArgs()`
 
 ---
 
@@ -337,7 +337,7 @@ if b.logFile != "" {
 file, simulates cleanup, verifies removal, and confirms idempotent
 double-remove.
 
-**File**: `kexas/launcher/launcher.go` → `Browser` struct + `Close()`
+**File**: `kexas/klauncher/launcher.go` → `Browser` struct + `Close()`
 
 ---
 

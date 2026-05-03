@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/jankylewis/kexas"
-	"github.com/jankylewis/kexas/launcher"
+	"github.com/jankylewis/kexas/klauncher"
 )
 
 // maxLaunchRetries is the number of times to retry a failed browser launch.
@@ -17,7 +17,7 @@ const maxLaunchRetries int = 5
 // Retries up to maxLaunchRetries times with exponential backoff on failure.
 // The wrapped error preserves whether the failure was in browser launch or first-page.
 func launchIsolatedBrowser(config *Config) (*kexas.Browser, *kexas.Page, error) {
-	var opts *launcher.Options = launcher.DefaultOptions()
+	var opts *klauncher.Options = klauncher.DefaultOptions()
 	opts.Headless = config.Headless
 	if config.BrowserExecutable != "" {
 		opts.ExecutablePath = config.BrowserExecutable
@@ -53,7 +53,7 @@ func launchIsolatedBrowser(config *Config) (*kexas.Browser, *kexas.Page, error) 
 
 // attemptLaunch performs a single browser+page launch attempt with no retry.
 // On FirstPage failure the browser is closed before returning to avoid leaking it.
-func attemptLaunch(opts *launcher.Options) (*kexas.Browser, *kexas.Page, error) {
+func attemptLaunch(opts *klauncher.Options) (*kexas.Browser, *kexas.Page, error) {
 	var browser *kexas.Browser
 	var err error
 	browser, err = kexas.Launch(opts)

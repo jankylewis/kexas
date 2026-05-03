@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -104,6 +106,23 @@ func (r *Response) HasCookie(name string) bool {
 // BodyContains returns true if the response body contains the given substring.
 func (r *Response) BodyContains(substr string) bool {
 	return strings.Contains(r.Body, substr)
+}
+
+// SaveToFile writes the raw response body to the given filesystem path.
+// Creates parent directories as needed. Common pattern for downloading
+// binary assets (images, PDFs, archives) — mirrors RestSharp's `DownloadData`
+// + write-to-file step or Axios's `responseType: 'stream'` + pipe.
+func (r *Response) SaveToFile(path string) error {
+	var dir string = filepath.Dir(path)
+	var err error = os.MkdirAll(dir, 0755)
+	if err != nil {
+		return fmt.Errorf("kapi: create dir %s: %w", dir, err)
+	}
+	err = os.WriteFile(path, r.BodyBytes, 0644)
+	if err != nil {
+		return fmt.Errorf("kapi: write %s: %w", path, err)
+	}
+	return nil
 }
 
 // String returns a human-readable summary of the response.

@@ -1,6 +1,6 @@
 # Launcher Module — Deep1 Level (For SE Students)
 
-Source: `kexas/launcher/launcher.go`
+Source: `kexas/klauncher/launcher.go`
 
 ---
 

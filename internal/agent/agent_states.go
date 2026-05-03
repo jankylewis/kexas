@@ -130,54 +130,26 @@ func (as AgentStates) TotalMemoryUsage() int {
 	return total
 }
 
-// ResetAll resets all agent states to disabled
+// ResetAll resets all agent states to disabled.
 func (as *AgentStates) ResetAll() {
-	if as.DOM != nil {
-		as.DOM.Enabled = false
-		as.DOM.Context = nil
-		as.DOM.LastUsed = time.Time{}
-		as.DOM.Error = nil
+	resetState(as.DOM)
+	resetState(as.Input)
+	resetState(as.Runtime)
+	resetState(as.Network)
+	resetState(as.Page)
+	resetState(as.Security)
+	resetState(as.Debugger)
+	resetState(as.Profiler)
+}
+
+// resetState clears one AgentState back to its zero/disabled form. Nil-safe so
+// callers don't have to nil-check each field.
+func resetState(s *AgentState) {
+	if s == nil {
+		return
 	}
-	if as.Input != nil {
-		as.Input.Enabled = false
-		as.Input.Context = nil
-		as.Input.LastUsed = time.Time{}
-		as.Input.Error = nil
-	}
-	if as.Runtime != nil {
-		as.Runtime.Enabled = false
-		as.Runtime.Context = nil
-		as.Runtime.LastUsed = time.Time{}
-		as.Runtime.Error = nil
-	}
-	if as.Network != nil {
-		as.Network.Enabled = false
-		as.Network.Context = nil
-		as.Network.LastUsed = time.Time{}
-		as.Network.Error = nil
-	}
-	if as.Page != nil {
-		as.Page.Enabled = false
-		as.Page.Context = nil
-		as.Page.LastUsed = time.Time{}
-		as.Page.Error = nil
-	}
-	if as.Security != nil {
-		as.Security.Enabled = false
-		as.Security.Context = nil
-		as.Security.LastUsed = time.Time{}
-		as.Security.Error = nil
-	}
-	if as.Debugger != nil {
-		as.Debugger.Enabled = false
-		as.Debugger.Context = nil
-		as.Debugger.LastUsed = time.Time{}
-		as.Debugger.Error = nil
-	}
-	if as.Profiler != nil {
-		as.Profiler.Enabled = false
-		as.Profiler.Context = nil
-		as.Profiler.LastUsed = time.Time{}
-		as.Profiler.Error = nil
-	}
+	s.Enabled = false
+	s.Context = nil
+	s.LastUsed = time.Time{}
+	s.Error = nil
 }

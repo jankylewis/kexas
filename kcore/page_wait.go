@@ -100,6 +100,11 @@ func (p *Page) WaitForURLContains(substr string, timeout time.Duration) error {
 	if timeout < 100*time.Millisecond {
 		return errors.TimeoutInvalidFormat(timeout)
 	}
+	// Match the nil-page guard pattern used by every other Wait* method —
+	// without it, p.URL() on a nil receiver panics.
+	if p == nil {
+		return errors.URLDidNotContainWithin(substr, timeout)
+	}
 
 	var start time.Time = time.Now()
 	var pollInterval time.Duration = 100 * time.Millisecond
