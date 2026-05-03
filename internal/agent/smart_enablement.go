@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kexas-project/kexas/errors"
+	"github.com/jankylewis/kexas/errors"
 )
 
 // EnsureAgent ensures an agent is enabled and returns its context

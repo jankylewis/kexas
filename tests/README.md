@@ -1,23 +1,27 @@
 # Kexas Tests
 
+Test files are organized by source-package mirror — each `tests/<X>/` folder contains tests for the corresponding `kexas/<X>/` source package or sub-system.
+
 ## Running Tests
 
 ```bash
-# Unit tests only (default — fast, no Chrome needed)
-go test ./tests/ -count=1
+# All unit tests across every subdir (default — fast, no Chrome needed)
+go test ./tests/... -count=1
 
-# Integration tests only (requires Chrome)
-go test -tags=integration ./tests/ -count=1
+# All integration tests (requires Chrome). Use -p 1 for stability.
+go test -tags=integration -p 1 ./tests/... -count=1
 
-# All tests
-go test -tags=integration ./tests/ -count=1
-
-# Launcher tests (separate package)
-go test ./launcher/ -count=1
+# Single-folder targeting
+go test ./tests/kcore/ -count=1
+go test -tags=integration ./tests/kcore/ -count=1
 
 # Parallel with race detector
-go test ./tests/ -count=1 -race
+go test ./tests/... -count=1 -race
 ```
+
+> **`-p 1` for integration runs:** when invoked via `./tests/...`, Go test runs each package binary in parallel by default. With 10 packages each launching Chrome, the parallel browser load can saturate system resources and hang. Use `-p 1` to serialize package execution — adds ~10s but eliminates the flake. Single-folder runs (`./tests/kcore/` etc.) don't need this.
+>
+> **`./tests/` (no `...`) doesn't work:** `tests/` itself contains no `.go` files now, only sub-packages. Always use `./tests/...` to recurse.
 
 ## Build Tags
 
@@ -26,51 +30,35 @@ go test ./tests/ -count=1 -race
 | *(none)* | Unit tests — run by default | No |
 | `integration` | Browser integration tests | Yes |
 
-## Test File Groups
+Files with `//go:build integration` at the top are excluded from default runs.
 
-### Core (browser, page, navigation)
-- `alpha_init_test.go` — AlphaInit enforcement
-- `browser_test.go` — Browser launch/close *(integration)*
-- `page_test.go` — Page navigation, title, URL *(integration)*
-- `page_find_test.go` — Page.Find selector logic
-- `page_find_strict_test.go` — Strict find mode *(integration)*
-- `page_wait_test.go` — WaitForElement* methods
+## Folder Layout
 
-### Element (interaction, scroll, hover)
-- `element_test.go` — Element struct, IsVisible
-- `element_enhanced_test.go` — Enhanced element methods
-- `element_interaction_test.go` — Click, Type, Hover
-- `scroll_test.go` — ScrollIntoView, page scroll
+Each subdirectory is its own Go test package (`package <name>_test`).
 
-### Features (cookie, storage, multitab, recorder)
-- `cookie_test.go` — Cookie management *(integration)*
-- `storage_test.go` — Local/session storage *(integration)*
-- `multitab_test.go` — Multi-tab management *(integration)*
-- `recorder_test.go` — Video recording *(integration)*
+| Folder | Files | Tests | Purpose |
+|---|---|---|---|
+| `kcore/` | 15 | 201 | Core engine — browser, page, element, browser-state (cookie/storage/multitab/recorder) |
+| `ktest/` | 10 | 70 | Test framework + HTML report (config, suite, registration, parallel, html_*) |
+| `kassert/` | 4 | 82 | Assertion library (basic/compare + extended_matchers/extended_stats) |
+| `kapi/` | 6 | 44 | HTTP API client (helpers, client_construction, http_methods, request_builder, response, runtime) |
+| `critical/` | 6 | 52 | Critical-path scenarios — selection / wait / unit, each split into basic+edge/timeout |
+| `internal/` | 3 | 24 | Internal packages (agent, cdp, logger) |
+| `kwait/` | 2 | 16 | Wait strategies (for + pageload) |
+| `errors/` | 1 | 9 | Error types and sentinels |
+| `launcher/` | 1 | 8 | Launcher integration (port, cleanup) |
+| `config/` | 1 | 5 | Configuration loading + timeout |
 
-### Infrastructure (agent, CDP, errors, config, logger)
-- `agent_test.go` — Agent manager
-- `cdp_test.go` — CDP command registry
-- `config_timeout_test.go` — Timeout configuration
-- `errors_test.go` — Error types and sentinels
-- `logger_test.go` — Logger output
-- `launcher_test.go` — Launcher utilities (port, cleanup)
+**Total: 49 files, 511 tests.**
 
-### KAPI (HTTP API client)
-- `kapi_test.go` — HTTP client, request builder, response parsing
+The `launcher/` source package itself also contains internal tests (`launcher/launcher_test.go`, `launcher/launcher_parallel_test.go`) that test unexported internals. Those are separate from `tests/launcher/`.
 
-### Test Framework (ktest, kassert, kwait)
-- `ktest_test.go` — Test registration *(integration)*
-- `ktest_parallel_test.go` — Parallel execution
-- `kassert_test.go` — Assertion helpers
-- `kassert_extended_test.go` — Extended assertions
-- `kwait_test.go` — Wait utilities
+## File-size convention
 
-### Report
-- `report_test.go` — Test report generation
-- `report_html_test.go` — HTML report output
+Per project rules:
 
-### Critical
-- `critical_unit_test.go` — Critical unit scenarios
-- `critical_selection_test.go` — Critical selector scenarios
-- `critical_wait_test.go` — Critical wait scenarios
+- **`.go` source files**: 230 lines max
+- **`_test.go` test files**: 350 lines max
+- When exceeded, split into multiple meaningful files within the same package (e.g., `kapi_test.go` → `helpers_test.go`, `client_construction_test.go`, `http_methods_test.go`, `request_builder_test.go`, `response_test.go`, `runtime_test.go`).
+
+Same-package splits preserve cross-file mock/helper visibility (Go: identifiers in one file in `package X` are visible to all other files in the same `package X`), so type definitions and helpers placed in any file are usable across all files in that folder.

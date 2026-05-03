@@ -323,17 +323,26 @@ body {
   gap: 8px;
   margin-bottom: 8px;
 }
+/* The label span (Passed/Failed/Skipped) flexes so the count + percentage
+   columns line up vertically across all three rows regardless of label width. */
+.donut-legend li > span:not(.legend-dot) {
+  flex: 1;
+  min-width: 0;
+}
 .donut-legend strong {
-  margin-left: auto;
   color: var(--text);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  width: 32px;
+  text-align: right;
 }
 .donut-legend em {
   font-style: normal;
   color: var(--text-dim);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+  width: 56px;
+  text-align: right;
 }
 .legend-dot {
   width: 8px;
@@ -667,6 +676,27 @@ body {
   word-break: break-word;
   margin-top: 8px;
   line-height: 1.5;
+}
+
+/* ===== ARTIFACTS — per-test screenshot + video ===== */
+.artifact-section { margin-top: 12px; }
+.artifact-screenshot {
+  display: block;
+  max-width: 100%;
+  max-height: 480px;
+  margin-top: 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: zoom-in;
+}
+.artifact-video {
+  display: block;
+  max-width: 100%;
+  max-height: 480px;
+  margin-top: 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: #000;
 }
 
 /* ===== CONSOLE OUTPUT — Datadog log stream style ===== */

@@ -221,8 +221,8 @@ func TestThat_Equals_Failure(t *testing.T) {
 ```go
 import (
     "testing"
-    "github.com/kexas-project/kexas/internal/ktest"
-    "github.com/kexas-project/kexas/internal/kassert"
+    "github.com/jankylewis/kexas/internal/ktest"
+    "github.com/jankylewis/kexas/internal/kassert"
 )
 
 type MySuite struct {

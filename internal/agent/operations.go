@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kexas-project/kexas/errors"
+	"github.com/jankylewis/kexas/errors"
 )
 
 // IsEnabled checks if an agent is currently enabled

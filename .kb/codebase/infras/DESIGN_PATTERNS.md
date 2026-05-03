@@ -322,7 +322,7 @@ func process(page *Page) error {
 // options.go
 package kexas
 
-import "github.com/kexas-project/kexas/internal/launcher"
+import "github.com/jankylewis/kexas/internal/launcher"
 
 // LaunchOptions configures browser launch behavior.
 type LaunchOptions = launcher.Options

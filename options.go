@@ -1,6 +1,6 @@
 package kexas
 
-import "github.com/kexas-project/kexas/launcher"
+import "github.com/jankylewis/kexas/launcher"
 
 // LaunchOptions configures browser launch behavior.
 type LaunchOptions = launcher.Options

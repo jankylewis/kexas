@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kexas-project/kexas/internal/cdp"
-	"github.com/kexas-project/kexas/internal/logger"
+	"github.com/jankylewis/kexas/internal/cdp"
+	"github.com/jankylewis/kexas/internal/logger"
 )
 
 // AgentState represents the runtime state of a CDP agent

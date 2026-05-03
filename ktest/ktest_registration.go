@@ -3,7 +3,7 @@ package ktest
 import (
 	"fmt"
 
-	"github.com/kexas-project/kexas"
+	"github.com/jankylewis/kexas"
 )
 
 // ========================================

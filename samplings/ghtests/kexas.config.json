@@ -1,0 +1,10 @@
+{
+  "headless": true,
+  "parallelSet": 1,
+  "screenshotOnFail": true,
+  "screenshotDir": "./test-results/screenshots",
+  "videoDir": "./test-results/videos",
+  "reportDir": "./test-results",
+  "viewportWidth": 1280,
+  "viewportHeight": 720
+}

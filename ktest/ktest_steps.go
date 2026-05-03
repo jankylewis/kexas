@@ -42,11 +42,7 @@ func Step(t KTestT, title string, stepFunc func()) {
 	var ok bool
 	kt, ok = t.(*ktestT)
 	if !ok {
-		// Fallback: just run the function with logging
-		t.Logf("▸ Step: %s", title)
-		var start time.Time = time.Now()
-		stepFunc()
-		t.Logf("  ✓ %s (%s)", title, time.Since(start).String())
+		runStepFallback(t, title, stepFunc)
 		return
 	}
 
@@ -62,46 +58,12 @@ func Step(t KTestT, title string, stepFunc func()) {
 	kt.logs = append(kt.logs, startMsg)
 	kt.mu.Unlock()
 
-	// Run step with panic recovery
-	var stepPanicked bool = false
+	var stepPanicked bool
 	var panicVal interface{}
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				stepPanicked = true
-				panicVal = r
-			}
-		}()
-		stepFunc()
-	}()
-
+	stepPanicked, panicVal = runWithRecovery(stepFunc)
 	step.Duration = time.Since(start)
 
-	if stepPanicked {
-		step.Status = "failed"
-		step.Error = fmt.Sprintf("%v", panicVal)
-		var failMsg string = fmt.Sprintf("  ✗ %s (%s) — %s", title, step.Duration.String(), step.Error)
-		fmt.Println(failMsg)
-		kt.mu.Lock()
-		kt.logs = append(kt.logs, failMsg)
-		kt.mu.Unlock()
-	} else if kt.Failed() {
-		step.Status = "failed"
-		if len(kt.errors) > 0 {
-			step.Error = kt.errors[len(kt.errors)-1]
-		}
-		var failMsg string = fmt.Sprintf("  ✗ %s (%s)", title, step.Duration.String())
-		fmt.Println(failMsg)
-		kt.mu.Lock()
-		kt.logs = append(kt.logs, failMsg)
-		kt.mu.Unlock()
-	} else {
-		var passMsg string = fmt.Sprintf("  ✓ %s (%s)", title, step.Duration.String())
-		fmt.Println(passMsg)
-		kt.mu.Lock()
-		kt.logs = append(kt.logs, passMsg)
-		kt.mu.Unlock()
-	}
+	classifyAndLogStep(kt, title, &step, stepPanicked, panicVal)
 
 	kt.mu.Lock()
 	kt.steps = append(kt.steps, step)
@@ -111,4 +73,50 @@ func Step(t KTestT, title string, stepFunc func()) {
 	if stepPanicked {
 		panic(panicVal)
 	}
+}
+
+// runStepFallback runs a step against a non-ktestT KTestT (the path used by raw
+// *testing.T or other adapters). No structured step record is produced.
+func runStepFallback(t KTestT, title string, stepFunc func()) {
+	t.Logf("▸ Step: %s", title)
+	var start time.Time = time.Now()
+	stepFunc()
+	t.Logf("  ✓ %s (%s)", title, time.Since(start).String())
+}
+
+// runWithRecovery executes fn and reports whether it panicked, returning the
+// recovered value if so. The caller decides whether to re-raise.
+func runWithRecovery(fn func()) (panicked bool, value interface{}) {
+	defer func() {
+		if r := recover(); r != nil {
+			panicked = true
+			value = r
+		}
+	}()
+	fn()
+	return
+}
+
+// classifyAndLogStep updates step.Status / step.Error based on whether the step
+// panicked, was failed by the test, or passed cleanly — and emits the matching
+// log line to both stdout and the ktestT log buffer.
+func classifyAndLogStep(kt *ktestT, title string, step *testStep, stepPanicked bool, panicVal interface{}) {
+	var msg string
+	if stepPanicked {
+		step.Status = "failed"
+		step.Error = fmt.Sprintf("%v", panicVal)
+		msg = fmt.Sprintf("  ✗ %s (%s) — %s", title, step.Duration.String(), step.Error)
+	} else if kt.Failed() {
+		step.Status = "failed"
+		if len(kt.errors) > 0 {
+			step.Error = kt.errors[len(kt.errors)-1]
+		}
+		msg = fmt.Sprintf("  ✗ %s (%s)", title, step.Duration.String())
+	} else {
+		msg = fmt.Sprintf("  ✓ %s (%s)", title, step.Duration.String())
+	}
+	fmt.Println(msg)
+	kt.mu.Lock()
+	kt.logs = append(kt.logs, msg)
+	kt.mu.Unlock()
 }

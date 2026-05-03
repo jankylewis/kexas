@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kexas-project/kexas/internal/logger"
+	"github.com/jankylewis/kexas/internal/logger"
 )
 
 // cleanOnce ensures cleanStaleTempProfiles runs exactly once per process,
@@ -22,53 +22,13 @@ var cleanOnce sync.Once
 // Also kills orphaned Chrome for Testing processes left behind by Ctrl+C.
 func killExistingChromeProcesses(port int) {
 	var log *logger.Logger = logger.New("launcher")
-	var killed bool = false
+	var killed bool
 
-	// Method 1: Kill processes using the specific port via lsof
-	var cmd *exec.Cmd = exec.Command("lsof", "-ti", fmt.Sprintf(":%d", port))
-	var output []byte
-	var err error
-	output, err = cmd.Output()
-	if err == nil && len(output) > 0 {
-		var pids []string = strings.Split(strings.TrimSpace(string(output)), "\n")
-		log.Info("found processes using port", "port", port, "count", len(pids))
-		for _, pid := range pids {
-			if pid == "" {
-				continue
-			}
-			log.Warn("killing process on port", "port", port, "pid", pid)
-			var killCmd *exec.Cmd = exec.Command("kill", "-9", pid)
-			var killErr error = killCmd.Run()
-			if killErr != nil {
-				log.Error("failed to kill process", "pid", pid, "err", killErr)
-			} else {
-				killed = true
-			}
-		}
+	if killProcessesUsingPort(port, log) {
+		killed = true
 	}
-
-	// Method 2: Kill orphaned "Chrome for Testing" processes by name
-	// These may exist after Ctrl+C kills the Go process but leaves Chrome alive
-	var pgrepCmd *exec.Cmd = exec.Command("pgrep", "-f", "Google Chrome for Testing")
-	var pgrepOut []byte
-	var pgrepErr error
-	pgrepOut, pgrepErr = pgrepCmd.Output()
-	if pgrepErr == nil && len(pgrepOut) > 0 {
-		var orphanPids []string = strings.Split(strings.TrimSpace(string(pgrepOut)), "\n")
-		log.Warn("found orphaned Chrome for Testing processes", "count", len(orphanPids))
-		for _, pid := range orphanPids {
-			if pid == "" {
-				continue
-			}
-			log.Warn("killing orphaned Chrome process", "pid", pid)
-			var killCmd *exec.Cmd = exec.Command("kill", "-9", pid)
-			var killErr error = killCmd.Run()
-			if killErr != nil {
-				log.Error("failed to kill orphaned process", "pid", pid, "err", killErr)
-			} else {
-				killed = true
-			}
-		}
+	if killOrphanedChromeForTesting(log) {
+		killed = true
 	}
 
 	if !killed {
@@ -76,9 +36,71 @@ func killExistingChromeProcesses(port int) {
 		return
 	}
 
-	// Poll for port release (up to 5 seconds)
+	waitForPortRelease(port, 5*time.Second, log)
+}
+
+// killProcessesUsingPort kills every PID that lsof reports as bound to port.
+// Returns true if any kill succeeded.
+func killProcessesUsingPort(port int, log *logger.Logger) bool {
+	var cmd *exec.Cmd = exec.Command("lsof", "-ti", fmt.Sprintf(":%d", port))
+	var output []byte
+	var err error
+	output, err = cmd.Output()
+	if err != nil || len(output) == 0 {
+		return false
+	}
+	var pids []string = strings.Split(strings.TrimSpace(string(output)), "\n")
+	log.Info("found processes using port", "port", port, "count", len(pids))
+
+	var anyKilled bool
+	for _, pid := range pids {
+		if pid == "" {
+			continue
+		}
+		log.Warn("killing process on port", "port", port, "pid", pid)
+		var killErr error = exec.Command("kill", "-9", pid).Run()
+		if killErr != nil {
+			log.Error("failed to kill process", "pid", pid, "err", killErr)
+			continue
+		}
+		anyKilled = true
+	}
+	return anyKilled
+}
+
+// killOrphanedChromeForTesting kills "Google Chrome for Testing" processes that may
+// have been left behind by Ctrl+C-ing the Go process without Chrome's cleanup running.
+func killOrphanedChromeForTesting(log *logger.Logger) bool {
+	var cmd *exec.Cmd = exec.Command("pgrep", "-f", "Google Chrome for Testing")
+	var output []byte
+	var err error
+	output, err = cmd.Output()
+	if err != nil || len(output) == 0 {
+		return false
+	}
+	var pids []string = strings.Split(strings.TrimSpace(string(output)), "\n")
+	log.Warn("found orphaned Chrome for Testing processes", "count", len(pids))
+
+	var anyKilled bool
+	for _, pid := range pids {
+		if pid == "" {
+			continue
+		}
+		log.Warn("killing orphaned Chrome process", "pid", pid)
+		var killErr error = exec.Command("kill", "-9", pid).Run()
+		if killErr != nil {
+			log.Error("failed to kill orphaned process", "pid", pid, "err", killErr)
+			continue
+		}
+		anyKilled = true
+	}
+	return anyKilled
+}
+
+// waitForPortRelease polls until isPortAvailable(port) returns true or timeout elapses.
+func waitForPortRelease(port int, timeout time.Duration, log *logger.Logger) {
 	var start time.Time = time.Now()
-	for time.Since(start) < 5*time.Second {
+	for time.Since(start) < timeout {
 		if isPortAvailable(port) {
 			log.Info("port released after killing processes", "port", port, "elapsed", time.Since(start))
 			return

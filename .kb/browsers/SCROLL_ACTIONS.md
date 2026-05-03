@@ -84,7 +84,7 @@ ErrScrollInvalidPixels   = "scroll pixels must not be zero"
 - `kexas/page_scroll.go` — Page-level scroll actions
 - `kexas/element_scroll.go` — Element-level ScrollIntoView
 - `kexas/errors/errors.go` — Scroll sentinel errors
-- `kexas/tests/scroll_test.go` — Unit tests
+- `kexas/tests/kcore/scroll_test.go` — Unit tests
 
 ---
 

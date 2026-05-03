@@ -7,27 +7,37 @@ import (
 
 // ErrorAssertion provides assertions for errors.
 type ErrorAssertion struct {
-	t   TestingT
-	err error
+	t    TestingT
+	err  error
+	name string
 }
 
 // ThatError creates a new error assertion.
 func ThatError(t TestingT, err error) *ErrorAssertion {
 	return &ErrorAssertion{
-		t:   t,
-		err: err,
+		t:    t,
+		err:  err,
+		name: "error",
 	}
+}
+
+// Named sets a custom name for the error being asserted (for better error messages
+// + structured-log labeling). Mirrors Assertion.Named so error-flavored assertions
+// can be tagged the same way as value-flavored ones.
+func (e *ErrorAssertion) Named(name string) *ErrorAssertion {
+	e.name = name
+	return e
 }
 
 // IsNil asserts that the error is nil.
 func (e *ErrorAssertion) IsNil() *ErrorAssertion {
 	if e.err != nil {
 		e.t.Helper()
-		e.t.Errorf("Expected no error, but got:\n  %v", e.err)
-		logFail("error", fmt.Sprintf("IsNil — got %v", e.err))
-	} else {
-		logPass("error", "IsNil")
+		e.t.Errorf("Expected %s to be nil, but got:\n  %v", e.name, e.err)
+		logFail(e.name, fmt.Sprintf("IsNil — got %v", e.err))
+		return e
 	}
+	logPass(e.name, "IsNil")
 	return e
 }
 
@@ -35,11 +45,11 @@ func (e *ErrorAssertion) IsNil() *ErrorAssertion {
 func (e *ErrorAssertion) IsNotNil() *ErrorAssertion {
 	if e.err == nil {
 		e.t.Helper()
-		e.t.Error("Expected an error, but got nil")
-		logFail("error", "IsNotNil — got nil")
-	} else {
-		logPass("error", "IsNotNil")
+		e.t.Errorf("Expected %s to be non-nil, but got nil", e.name)
+		logFail(e.name, "IsNotNil — got nil")
+		return e
 	}
+	logPass(e.name, "IsNotNil")
 	return e
 }
 
@@ -47,18 +57,18 @@ func (e *ErrorAssertion) IsNotNil() *ErrorAssertion {
 func (e *ErrorAssertion) HasMessage(expected string) *ErrorAssertion {
 	if e.err == nil {
 		e.t.Helper()
-		e.t.Error("Expected an error with message, but got nil")
+		e.t.Errorf("Expected %s to have message, but got nil", e.name)
 		return e
 	}
 
 	var msg string = e.err.Error()
 	if !strings.Contains(msg, expected) {
 		e.t.Helper()
-		e.t.Errorf("Expected error message to contain:\n  %q\nbut got:\n  %q", expected, msg)
-		logFail("error", fmt.Sprintf("HasMessage(%q)", expected))
-	} else {
-		logPass("error", fmt.Sprintf("HasMessage(%q)", expected))
+		e.t.Errorf("Expected %s message to contain:\n  %q\nbut got:\n  %q", e.name, expected, msg)
+		logFail(e.name, fmt.Sprintf("HasMessage(%q)", expected))
+		return e
 	}
+	logPass(e.name, fmt.Sprintf("HasMessage(%q)", expected))
 	return e
 }
 

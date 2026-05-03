@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/kexas-project/kexas"
+	"github.com/jankylewis/kexas"
 )
 
 // ========================================

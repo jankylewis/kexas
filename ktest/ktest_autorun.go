@@ -5,8 +5,8 @@ import (
 	"os"
 	"reflect"
 
-	"github.com/kexas-project/kexas"
-	"github.com/kexas-project/kexas/launcher"
+	"github.com/jankylewis/kexas"
+	"github.com/jankylewis/kexas/launcher"
 )
 
 // AutoRun automatically discovers and runs Test* functions in the current package

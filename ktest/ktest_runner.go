@@ -6,10 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kexas-project/kexas"
-	"github.com/kexas-project/kexas/internal/logger"
-	"github.com/kexas-project/kexas/kassert"
-	"github.com/kexas-project/kexas/ktest/report"
+	"github.com/jankylewis/kexas"
+	"github.com/jankylewis/kexas/internal/logger"
+	"github.com/jankylewis/kexas/kassert"
 )
 
 // ========================================
@@ -141,71 +140,18 @@ func runTestsSequentialRegistered(
 	tests []NamedTest,
 	config *Config,
 ) []testResult {
-	// Sort by priority even in sequential mode
 	SortTestsByPriority(tests)
 
 	var results []testResult
 	for _, test := range tests {
 		var testName string = test.Name
-		var testPassed bool = true
 		var shortName string = extractShortName(testName)
 		var screenshotName string = fmt.Sprintf("%s.%s", test.Filename, shortName)
+		var testPassed bool
 		var testDuration time.Duration
 
 		t.Run(testName, func(t KTestT) {
-			var testStart time.Time = time.Now()
-			defer func() {
-				testDuration = time.Since(testStart)
-			}()
-			ktestLog.Info("starting test", "name", shortName)
-			t.Logf("🧪 ktest: running %s", shortName)
-
-			// Launch new browser for this test only
-			ktestLog.Info("launching browser", "test", shortName)
-			fmt.Printf("🌐 ktest: launching browser for %s\n", shortName)
-			var browser *kexas.Browser
-			var page *kexas.Page
-			var err error
-			browser, page, err = launchIsolatedBrowser(config)
-			if err != nil {
-				t.Errorf("❌ ktest: failed to launch browser: %v", err)
-				testPassed = false
-				return
-			}
-			defer browser.Close()
-			defer page.Close()
-			ktestLog.Info("page created", "test", shortName)
-
-			// Execute global BeforeEach hook
-			ktestLog.Debug("executing BeforeEach hook", "test", shortName)
-			ExecuteGlobalBeforeEach(page)
-
-			// Recover from panics and take screenshot if needed
-			defer func() {
-				if r := recover(); r != nil {
-					t.Errorf("❌ ktest: test %s panicked: %v", testName, r)
-					testPassed = false
-					if config.ScreenshotOnFail {
-						takeScreenshot(t, page, screenshotName, config.ScreenshotDir)
-					}
-				}
-				ExecuteGlobalAfterEach(page)
-			}()
-
-			// Call the registered test function
-			test.Func(page, t)
-
-			// Check if test failed and take screenshot
-			if t.Failed() {
-				testPassed = false
-				if config.ScreenshotOnFail {
-					takeScreenshot(t, page, screenshotName, config.ScreenshotDir)
-				}
-			}
-
-			var elapsed time.Duration = time.Since(testStart)
-			ktestLog.Info("completed test", "name", shortName, "elapsed", elapsed.String())
-			t.Logf("✅ ktest: %s completed", shortName)
+			testPassed, testDuration = executeSequentialTest(t, test, config, shortName, screenshotName)
 		})
 
 		results = append(results, testResult{
@@ -219,85 +165,58 @@ func runTestsSequentialRegistered(
 	return results
 }
 
-// generateHTMLReport converts test results into an HTML report file.
-func generateHTMLReport(results []testResult, config *Config) {
-	var collector *report.Collector = report.NewCollector(config.ParallelSet)
+// executeSequentialTest runs one registered test in an isolated browser, taking screenshots
+// on failure and invoking the global Before/After hooks. Duration is captured via deferred
+// assignment so it includes browser teardown time, matching the original behavior.
+func executeSequentialTest(t KTestT, test NamedTest, config *Config, shortName, screenshotName string) (testPassed bool, duration time.Duration) {
+	var testStart time.Time = time.Now()
+	testPassed = true
+	defer func() { duration = time.Since(testStart) }()
 
-	for _, r := range results {
-		var status report.TestStatus = report.StatusPassed
-		if !r.passed {
-			status = report.StatusFailed
-		}
-		var reportSteps []report.TestStep = convertSteps(r.steps)
-		collector.Add(report.TestCaseResult{
-			Name:     r.name,
-			Status:   status,
-			Duration: r.elapsed,
-			Filename: r.filename,
-			WorkerID: r.workerID,
-			ErrorMsg: r.errorMsg,
-			Steps:    reportSteps,
-			Logs:     r.logs,
-		})
-	}
+	ktestLog.Info("starting test", "name", shortName)
+	t.Logf("🧪 ktest: running %s", shortName)
 
-	var cwd string
-	cwd, _ = os.Getwd()
-	var projectName string = report.ProjectNameFromDir(cwd)
-	var htmlReport *report.TestReport = collector.BuildReport(projectName)
-	var outputPath string
-	var versionedPath string
+	ktestLog.Info("launching browser", "test", shortName)
+	fmt.Printf("🌐 ktest: launching browser for %s\n", shortName)
+	var browser *kexas.Browser
+	var page *kexas.Page
 	var err error
-	outputPath, versionedPath, err = report.GenerateFiles(htmlReport, config.ReportDir)
+	browser, page, err = launchIsolatedBrowser(config)
 	if err != nil {
-		ktestLog.Error("failed to generate HTML report", "err", err)
+		t.Errorf("❌ ktest: failed to launch browser: %v", err)
+		testPassed = false
 		return
 	}
-	fmt.Printf("\n📊 HTML report: %s\n", outputPath)
-	if versionedPath != "" {
-		fmt.Printf("🗂  Archived copy: %s\n", versionedPath)
-	}
-}
+	defer browser.Close()
+	defer page.Close()
+	ktestLog.Info("page created", "test", shortName)
 
-// convertSteps converts internal testStep slices to report.TestStep slices.
-func convertSteps(steps []testStep) []report.TestStep {
-	if len(steps) == 0 {
-		return nil
-	}
-	var result []report.TestStep = make([]report.TestStep, len(steps))
-	for i, s := range steps {
-		result[i] = report.TestStep{
-			Title:    s.Title,
-			Status:   s.Status,
-			Duration: s.Duration,
-			Error:    s.Error,
+	ktestLog.Debug("executing BeforeEach hook", "test", shortName)
+	ExecuteGlobalBeforeEach(page)
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("❌ ktest: test %s panicked: %v", test.Name, r)
+			testPassed = false
+			if config.ScreenshotOnFail {
+				takeScreenshot(t, page, screenshotName, config.ScreenshotDir)
+			}
 		}
-	}
-	return result
-}
+		ExecuteGlobalAfterEach(page)
+	}()
 
-// printTestSummary prints the final test summary and exits with error code if needed.
-func printTestSummary(results []testResult, filteredTests []NamedTest) {
-	if len(filteredTests) == 1 {
-		fmt.Printf("\nTest finished:\n")
-	} else {
-		fmt.Printf("\nAll %d tests finished:\n", len(filteredTests))
-	}
+	test.Func(page, t)
 
-	var hasFailures bool = false
-	for _, result := range results {
-		var displayName string = formatResultDisplayName(result)
-		if result.passed {
-			fmt.Printf("%s passed\n", displayName)
-		} else {
-			fmt.Printf("%s failed\n", displayName)
-			hasFailures = true
+	if t.Failed() {
+		testPassed = false
+		if config.ScreenshotOnFail {
+			takeScreenshot(t, page, screenshotName, config.ScreenshotDir)
 		}
 	}
 
-	if hasFailures {
-		ktestLog.Error("test suite finished with failures")
-		os.Exit(1)
-	}
-	ktestLog.Info("test suite finished", "total", len(filteredTests), "passed", len(filteredTests))
+	var elapsed time.Duration = time.Since(testStart)
+	ktestLog.Info("completed test", "name", shortName, "elapsed", elapsed.String())
+	t.Logf("✅ ktest: %s completed", shortName)
+	return
 }
+

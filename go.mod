@@ -1,4 +1,4 @@
-module github.com/kexas-project/kexas
+module github.com/jankylewis/kexas
 
 go 1.25.5
 

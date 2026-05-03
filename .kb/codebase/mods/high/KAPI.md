@@ -1,7 +1,7 @@
 # KAPI — HTTP API Client Overview
 
 **Files:** `kexas/kapi/client.go`, `kexas/kapi/response.go`
-**Package:** `github.com/kexas-project/kexas/kapi`
+**Package:** `github.com/jankylewis/kexas/kapi`
 **Status:** Implemented
 
 ---

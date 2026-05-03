@@ -11,7 +11,7 @@
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/kexas-project/kexas.git
+git clone https://github.com/jankylewis/kexas.git
 cd kexas
 ```
 
@@ -159,7 +159,7 @@ package main
 
 import (
     "log"
-    "github.com/kexas-project/kexas"
+    "github.com/jankylewis/kexas"
 )
 
 func main() {
@@ -239,7 +239,7 @@ go test ./tests/... -v -tags=integration
 #### Enable Debug Logging
 
 ```go
-import "github.com/kexas-project/kexas/internal/logger"
+import "github.com/jankylewis/kexas/internal/logger"
 
 log := logger.New("cdp").WithLevel(logger.LevelDebug)
 ```

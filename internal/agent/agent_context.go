@@ -111,65 +111,34 @@ func (ac AgentContext) GetContext(agentName string) interface{} {
 	}
 }
 
-// SetContext sets the context for a specific agent
+// SetContext sets the context for a specific agent. Silently drops a context whose
+// dynamic type does not match the agent's expected context struct.
 func (ac *AgentContext) SetContext(agentName string, context interface{}) {
 	switch agentName {
 	case AgentDOM:
-		var domCtx *DOMContext
-		var ok bool
-		domCtx, ok = context.(*DOMContext)
-		if ok {
-			ac.DOM = domCtx
-		}
+		assignIfTypeMatches(&ac.DOM, context)
 	case AgentInput:
-		var inputCtx *InputContext
-		var ok bool
-		inputCtx, ok = context.(*InputContext)
-		if ok {
-			ac.Input = inputCtx
-		}
+		assignIfTypeMatches(&ac.Input, context)
 	case AgentRuntime:
-		var runtimeCtx *RuntimeContext
-		var ok bool
-		runtimeCtx, ok = context.(*RuntimeContext)
-		if ok {
-			ac.Runtime = runtimeCtx
-		}
+		assignIfTypeMatches(&ac.Runtime, context)
 	case AgentNetwork:
-		var networkCtx *NetworkContext
-		var ok bool
-		networkCtx, ok = context.(*NetworkContext)
-		if ok {
-			ac.Network = networkCtx
-		}
+		assignIfTypeMatches(&ac.Network, context)
 	case AgentPage:
-		var pageCtx *PageContext
-		var ok bool
-		pageCtx, ok = context.(*PageContext)
-		if ok {
-			ac.Page = pageCtx
-		}
+		assignIfTypeMatches(&ac.Page, context)
 	case AgentSecurity:
-		var securityCtx *SecurityContext
-		var ok bool
-		securityCtx, ok = context.(*SecurityContext)
-		if ok {
-			ac.Security = securityCtx
-		}
+		assignIfTypeMatches(&ac.Security, context)
 	case AgentDebugger:
-		var debuggerCtx *DebuggerContext
-		var ok bool
-		debuggerCtx, ok = context.(*DebuggerContext)
-		if ok {
-			ac.Debugger = debuggerCtx
-		}
+		assignIfTypeMatches(&ac.Debugger, context)
 	case AgentProfiler:
-		var profilerCtx *ProfilerContext
-		var ok bool
-		profilerCtx, ok = context.(*ProfilerContext)
-		if ok {
-			ac.Profiler = profilerCtx
-		}
+		assignIfTypeMatches(&ac.Profiler, context)
+	}
+}
+
+// assignIfTypeMatches sets *dst = src if src's dynamic type is T. No-op on mismatch.
+// Used by SetContext to collapse 8 nearly-identical type-assert-and-assign blocks.
+func assignIfTypeMatches[T any](dst *T, src interface{}) {
+	if v, ok := src.(T); ok {
+		*dst = v
 	}
 }
 

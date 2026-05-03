@@ -19,7 +19,7 @@ Kexas is a modern browser automation platform for Go. It drives Chromium directl
 ## Installation
 
 ```bash
-go get github.com/kexas-project/kexas
+go get github.com/jankylewis/kexas
 ```
 
 ## Quick Start
@@ -31,7 +31,7 @@ package main
 
 import (
     "log"
-    "github.com/kexas-project/kexas"
+    "github.com/jankylewis/kexas"
 )
 
 func main() {
@@ -65,9 +65,9 @@ func main() {
 package main
 
 import (
-    "github.com/kexas-project/kexas"
-    "github.com/kexas-project/kexas/ktest"
-    "github.com/kexas-project/kexas/kassert"
+    "github.com/jankylewis/kexas"
+    "github.com/jankylewis/kexas/ktest"
+    "github.com/jankylewis/kexas/kassert"
 )
 
 var _ = kexas.AlphaInit(
@@ -132,7 +132,7 @@ kexas/                              Root package — public API surface
 ├── cookie.go                       Cookie struct, GetCookies(), SetCookie(), DeleteCookies(), ClearCookies()
 ├── storage.go                      LocalStorage/SessionStorage — Get/Set/Remove/Clear/GetAll/Has/Length
 ├── recorder.go                     Recorder — frame capture, save to disk, custom config, start/stop
-├── go.mod                          Module: github.com/kexas-project/kexas
+├── go.mod                          Module: github.com/jankylewis/kexas
 ├── go.sum                          Dependency checksums
 │
 ├── errors/                         Public error types
@@ -266,9 +266,9 @@ When using the testing framework, config is automatically loaded:
 package main
 
 import (
-    "github.com/kexas-project/kexas"
-    "github.com/kexas-project/kexas/ktest"
-    "github.com/kexas-project/kexas/kassert"
+    "github.com/jankylewis/kexas"
+    "github.com/jankylewis/kexas/ktest"
+    "github.com/jankylewis/kexas/kassert"
 )
 
 var _ = kexas.AlphaInit(
@@ -354,7 +354,7 @@ kassert.That(t, url).EndsWith(".com")
 Kexas implements Playwright-standard wait strategies for page navigation:
 
 ```go
-import "github.com/kexas-project/kexas/kwait"
+import "github.com/jankylewis/kexas/kwait"
 
 // Wait until response headers received (fastest)
 page.Navigate(url, kwait.WaitUntilCommit)

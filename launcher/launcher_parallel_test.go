@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kexas-project/kexas/internal/logger"
+	"github.com/jankylewis/kexas/internal/logger"
 )
 
 // ========================================

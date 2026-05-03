@@ -26,14 +26,16 @@ type TestStep struct {
 
 // TestCaseResult holds the result of a single test execution.
 type TestCaseResult struct {
-	Name     string        `json:"name"`
-	Status   TestStatus    `json:"status"`
-	Duration time.Duration `json:"duration"`
-	Filename string        `json:"filename"`
-	WorkerID int           `json:"workerID"`
-	ErrorMsg string        `json:"errorMsg,omitempty"`
-	Steps    []TestStep    `json:"steps,omitempty"`
-	Logs     []string      `json:"logs,omitempty"`
+	Name           string        `json:"name"`
+	Status         TestStatus    `json:"status"`
+	Duration       time.Duration `json:"duration"`
+	Filename       string        `json:"filename"`
+	WorkerID       int           `json:"workerID"`
+	ErrorMsg       string        `json:"errorMsg,omitempty"`
+	Steps          []TestStep    `json:"steps,omitempty"`
+	Logs           []string      `json:"logs,omitempty"`
+	ScreenshotPath string        `json:"screenshotPath,omitempty"` // captured for every test
+	VideoPath      string        `json:"videoPath,omitempty"`      // captured for every test
 }
 
 // TestSuiteResult groups test results by file or group name.

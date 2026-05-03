@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kexas-project/kexas"
+	"github.com/jankylewis/kexas"
 )
 
 // discoverTestFunctions finds all Test* functions in the current package
@@ -41,34 +41,61 @@ func RegisterTest(testFunc interface{}) {
 	}
 }
 
-// runTestsSequential runs tests one by one.
-func runTestsSequential(t KTestT, suiteValue reflect.Value, baseSuite *Suite, methods []reflect.Method, config *Config) {
+// runTestsSequential runs tests one by one and collects per-test results
+// for downstream HTML report generation.
+func runTestsSequential(t KTestT, suiteValue reflect.Value, baseSuite *Suite, methods []reflect.Method, config *Config) []testResult {
+	var results []testResult
+	var suiteName string = suiteFilename(suiteValue)
 	for _, method := range methods {
-		runSingleTest(t, suiteValue, baseSuite, method, config)
+		results = append(results, runSingleTest(t, suiteValue, baseSuite, method, config, suiteName))
 	}
+	return results
 }
 
-// runTestsParallel runs tests in parallel.
-func runTestsParallel(t KTestT, suiteValue reflect.Value, baseSuite *Suite, methods []reflect.Method, config *Config) {
+// runTestsParallel runs tests in parallel and collects per-test results.
+func runTestsParallel(t KTestT, suiteValue reflect.Value, baseSuite *Suite, methods []reflect.Method, config *Config) []testResult {
+	var results []testResult
+	var resultsMu sync.Mutex
 	var wg sync.WaitGroup
+	var suiteName string = suiteFilename(suiteValue)
+
 	for _, method := range methods {
 		wg.Add(1)
 		var m reflect.Method = method
 		go func() {
 			defer wg.Done()
-			runSingleTest(t, suiteValue, baseSuite, m, config)
+			var r testResult = runSingleTest(t, suiteValue, baseSuite, m, config, suiteName)
+			resultsMu.Lock()
+			results = append(results, r)
+			resultsMu.Unlock()
 		}()
 	}
 	wg.Wait()
+	return results
 }
 
-// runSingleTest runs a single test method with retries.
-func runSingleTest(t KTestT, suiteValue reflect.Value, baseSuite *Suite, method reflect.Method, config *Config) {
+// runSingleTest runs a single test method with retries and returns a testResult
+// (used by the HTML report generator). Outcome flows back via closure variables
+// because t.Run blocks until the closure completes.
+//
+// Always-on artifacts captured per test (regardless of pass/fail):
+//   - One end-of-test screenshot at config.ScreenshotDir/<TestName>.png
+//   - One per-test video recording at config.VideoDir/<TestName>.mp4
+//     (falls back to <TestName>.mp4_frames/ when ffmpeg is missing)
+func runSingleTest(t KTestT, suiteValue reflect.Value, baseSuite *Suite, method reflect.Method, config *Config, suiteName string) testResult {
 	var testName string = method.Name
+	var passed bool = true
+	var elapsed time.Duration
+	var errMsg string
+	var screenshotPath string
+	var videoPath string
 
 	t.Run(testName, func(t KTestT) {
+		var recorder *kexas.Recorder = startTestRecording(t, baseSuite.Page, config)
+
 		var attempts int = config.Retries + 1
 		var lastErr error
+		var start time.Time = time.Now()
 
 		for attempt := 0; attempt < attempts; attempt++ {
 			if attempt > 0 {
@@ -77,16 +104,120 @@ func runSingleTest(t KTestT, suiteValue reflect.Value, baseSuite *Suite, method 
 
 			var success bool = runTestAttempt(t, suiteValue, baseSuite, method, config)
 			if success {
-				return
+				elapsed = time.Since(start)
+				goto done
 			}
-
 			lastErr = fmt.Errorf("test failed")
 		}
 
+		passed = false
+		elapsed = time.Since(start)
+		errMsg = fmt.Sprintf("failed after %d attempts", attempts)
 		if lastErr != nil {
 			t.Errorf("ktest: %s failed after %d attempts", testName, attempts)
 		}
+
+	done:
+		// Always-on artifacts: end-of-test screenshot + video, regardless of pass/fail.
+		// Failures are logged but don't fail the test.
+		screenshotPath = captureEndOfTestScreenshot(t, baseSuite.Page, testName, config)
+		videoPath = stopAndSaveTestVideo(t, recorder, testName, config)
 	})
+
+	return testResult{
+		name:           testName,
+		passed:         passed,
+		filename:       suiteName,
+		elapsed:        elapsed,
+		workerID:       0,
+		errorMsg:       errMsg,
+		screenshotPath: screenshotPath,
+		videoPath:      videoPath,
+	}
+}
+
+// startTestRecording begins per-test video capture. Returns nil on disabled
+// (config.VideoDir == "") or on failure (logged, not propagated).
+func startTestRecording(t KTestT, page *kexas.Page, config *Config) *kexas.Recorder {
+	if config.VideoDir == "" {
+		return nil
+	}
+	var recorder *kexas.Recorder
+	var err error
+	recorder, err = page.StartRecording()
+	if err != nil {
+		t.Logf("ktest: video record start failed: %v", err)
+		return nil
+	}
+	return recorder
+}
+
+// stopAndSaveTestVideo finalizes the recorder into config.VideoDir/<TestName>.mp4.
+// Returns the saved path (empty on disabled / failure).
+func stopAndSaveTestVideo(t KTestT, recorder *kexas.Recorder, testName string, config *Config) string {
+	if recorder == nil {
+		return ""
+	}
+	var stopErr error = recorder.Stop()
+	if stopErr != nil {
+		t.Logf("ktest: video record stop failed: %v", stopErr)
+	}
+	var mkdirErr error = os.MkdirAll(config.VideoDir, 0755)
+	if mkdirErr != nil {
+		t.Logf("ktest: failed to create video dir %s: %v", config.VideoDir, mkdirErr)
+		return ""
+	}
+	var outputPath string = filepath.Join(config.VideoDir, testName+".mp4")
+	var savedPath string
+	var saveErr error
+	savedPath, saveErr = recorder.SaveVideo(outputPath)
+	if saveErr != nil {
+		t.Logf("ktest: video save failed: %v", saveErr)
+		return ""
+	}
+	return savedPath
+}
+
+// captureEndOfTestScreenshot takes one screenshot per test (always-on).
+// Returns the saved path (empty when ScreenshotOnFail is false / on failure).
+func captureEndOfTestScreenshot(t KTestT, page *kexas.Page, testName string, config *Config) string {
+	if !config.ScreenshotOnFail {
+		return ""
+	}
+	var data []byte
+	var err error
+	data, err = page.Screenshot()
+	if err != nil {
+		t.Logf("ktest: end-of-test screenshot failed: %v", err)
+		return ""
+	}
+	err = os.MkdirAll(config.ScreenshotDir, 0755)
+	if err != nil {
+		t.Logf("ktest: failed to create screenshot dir: %v", err)
+		return ""
+	}
+	var outputPath string = filepath.Join(config.ScreenshotDir, testName+".png")
+	err = os.WriteFile(outputPath, data, 0644)
+	if err != nil {
+		t.Logf("ktest: failed to save screenshot: %v", err)
+		return ""
+	}
+	return outputPath
+}
+
+// suiteFilename returns the suite's Go type name (e.g., "LoginSuite") for use
+// as the report's per-suite grouping key. Falls back to "suite" if reflection
+// can't extract a useful name.
+func suiteFilename(suiteValue reflect.Value) string {
+	var t reflect.Type = suiteValue.Type()
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	var name string = t.Name()
+	if name == "" {
+		return "suite"
+	}
+	return name
 }
 
 // runTestAttempt runs a single attempt of a test.

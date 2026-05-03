@@ -483,7 +483,7 @@ kexas/
 // options.go - Public API
 package kexas
 
-import "github.com/kexas-project/kexas/internal/launcher"
+import "github.com/jankylewis/kexas/internal/launcher"
 
 // Type alias exposes internal type cleanly
 type LaunchOptions = launcher.Options
